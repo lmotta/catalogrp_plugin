@@ -81,10 +81,11 @@ class API_RP(API_Catalog):
   def existImage(self, meta_json,  sbands):
     def setFinished(response):
       if not response['isOk']:
-        substring = "server replied:"
         msg = response['message']
-        msg = msg[ msg.index( substring ) + len( substring ) + 1 : ]
-        response['message'] = msg
+        if not self.isKilled():
+          substring = "server replied:"
+          msg = msg[ msg.index( substring ) + len( substring ) + 1 : ]
+          response['message'] = msg
         del response['errorCode']
         self.response = response
       elif response['isJSON']:
@@ -402,7 +403,7 @@ class CatalogRP(QtCore.QObject):
         extent = self.canvas.extent() if crsCanvas == crsLayer else ct.transform( self.canvas.extent() )
         return json.loads( QgsCore.QgsGeometry.fromRect( extent ).exportToGeoJSON() )
 
-      def finished( errorTMS ):
+      def finished( noTMS ):
         self.canvas.scene().removeItem( rb )
         if not self.hasCriticalMessage:
           self.msgBar.popWidget()
@@ -418,8 +419,8 @@ class CatalogRP(QtCore.QObject):
             removeFeatures()
           typeMessage = QgsGui.QgsMessageBar.WARNING
           msg = "Canceled the search of images. Removed {} features"
-        elif errorTMS > 0:
-          msg = "Finished the search of images. Found '{{}}' images - Missing '{}' TMS".format( errorTMS )
+        elif noTMS > 0:
+          msg = "Finished the search of images. Found '{{}}' images - Missing '{}' TMS".format( noTMS )
           typeMessage = QgsGui.QgsMessageBar.WARNING        
 
         msg = msg.format( self.stepProcessing )
@@ -461,7 +462,7 @@ class CatalogRP(QtCore.QObject):
       msg = "Creating {} catalog ({} total)".format( satellite, totalImage )
       self.mbcancel = MessageBarCancel( CatalogRP.pluginName, self.msgBar, msg, self.apiServer.kill )
 
-      errorTMS = 0
+      noTMS = 0
       self.stepProcessing = 0
       features = []
       fields = [ 'id', 'acquired', 'thumbnail', 'meta_html', 'meta_json', 'meta_jsize' ] # See FIELDs order from createLayer
@@ -471,14 +472,14 @@ class CatalogRP(QtCore.QObject):
         feat, isOk =  getFeature(item, fields, self.apiServer.existImage, self.settings['rgb'] )
         features.append( feat )
         if not isOk:
-          errorTMS += 1
+          noTMS += 1
         msg = "Adding {}/{} features...".format( self.stepProcessing, totalImage  )
         self.mbcancel.message( msg )
         self.stepProcessing += 1
 
       commitFeatures( features )
       del features[:]
-      finished( errorTMS )
+      finished( noTMS )
 
     if not hasSettingPath():
       return
@@ -544,7 +545,7 @@ class CatalogRP(QtCore.QObject):
       def getLayers():
         ltls = self.catalog['ltg'].findLayers()
         if len( ltls ) == 0:
-          return
+          return []
         # Sort layer
         d_name_layerd = {}
         for ltl in ltls:
@@ -583,6 +584,11 @@ class CatalogRP(QtCore.QObject):
         self.catalog['ltg'].setName( name )
 
       layers = getLayers()
+      if len( layers ) == 0:
+        rgb = ','.join( self.settings['rgb'] )
+        name = "{} Catalog {} ({}) [{}]".format( self.catalogName, self.catalog['satellite'], rgb, 0 )
+        self.catalog['ltg'].setName( name )
+        return
       groupDates = getGroupsDate( layers )
       addGroupDates( groupDates )
       setNameGroupCatalog( len( groupDates ) )

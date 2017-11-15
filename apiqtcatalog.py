@@ -247,6 +247,9 @@ class API_Catalog(QtCore.QObject):
   def kill(self):
     self.access.kill()
 
+  def isKilled(self):
+    return self.access.isKilled
+
   def isRunning(self):
     return self.access.isRunning()
 

@@ -23,6 +23,7 @@ import os, shutil
 
 from PyQt4 import QtCore, QtGui, QtXml
 from qgis import core as QgsCore, gui as QgsGui, utils as QgsUtils
+from apiqtcatalog import API_Catalog
 
 class DialogCatalogSetting(QtGui.QDialog):
   titleSelectDirectory = "Select directory for TMS"
@@ -325,14 +326,31 @@ class LegendCatalogLayer():
     self.legendInterface = QgsUtils.iface.legendInterface()
     self.layer, self.actionTMS = None, None
 
-  def _getLabelTMS(self,):
-    if not self.hasTMS is None:
-      pass
-    selected = self.layer.selectedFeatureCount() 
-    total = self.layer.featureCount()
-    prefix = "{} total".format( total )
-    if selected > 0:
-      prefix = "{}/{} selected".format( selected, total )
+  def _getLabelTMS(self):
+    def getNoTMS(getFeatures):
+      request = QgsCore.QgsFeatureRequest().setFlags( QgsCore.QgsFeatureRequest.NoGeometry )
+      iter = getFeatures( request )
+      noTMS = 0
+      for feat in iter:
+        ( isOk, hasTMS ) = API_Catalog.getValue( feat['meta_json'], ['TMS','isOk'])
+        if  not hasTMS:
+          noTMS += 1
+      return noTMS
+
+    totaSelected = self.layer.selectedFeatureCount()
+    totalAll = self.layer.featureCount()
+    prefix = "{} total".format( totalAll)
+    if totaSelected > 0:
+      noTMS = getNoTMS( self.layer.selectedFeaturesIterator )
+      if noTMS > 0:
+        prefix = "{}/{} selected - {} without TMS".format( totaSelected, totalAll, noTMS )
+      else:
+        prefix = "{}/{} selected".format( totaSelected, totalAll )
+    else:
+      noTMS = getNoTMS( self.layer.getFeatures )
+      if noTMS > 0:
+        prefix = "{} total - {} without TMS".format( totalAll,  noTMS )
+
     return u"{} ({})".format( self.labelTMS, prefix )
 
   def clean(self):
