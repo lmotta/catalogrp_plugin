@@ -24,7 +24,6 @@ from PyQt4 import QtCore
 
 from qgis import core as QgsCore
 
-
 class WorkerCreateTMS_GDAL_WMS(QtCore.QObject):
   finished = QtCore.pyqtSignal( dict )
   stepProgress = QtCore.pyqtSignal( int )
@@ -34,7 +33,6 @@ class WorkerCreateTMS_GDAL_WMS(QtCore.QObject):
     self.logMessage, self.legendRasterGeom = logMessage, legendRasterGeom
     self.ltgRoot = QgsCore.QgsProject.instance().layerTreeRoot()
     self.isKilled = None # set in run
-    self.ltgCatalog = None # setting
 
   def setting(self, data):
    self.id_table = data['id_layer']
@@ -47,7 +45,10 @@ class WorkerCreateTMS_GDAL_WMS(QtCore.QObject):
    self.user_pwd = None if not data.has_key( key ) else data[ key ]
    key = 'rgb' # [ 'r', 'g', 'b' ]
    self.rgb  = None if not data.has_key( key ) else data[ key ]
+   key = 'hasTMS'
+   self.hasTMS  = None if not data.has_key( key ) else data[ key ]
    self.getURL = data['getURL']     # ( feat, self.rgb )
+   
 
   @QtCore.pyqtSlot()
   def run(self):
@@ -150,6 +151,10 @@ class WorkerCreateTMS_GDAL_WMS(QtCore.QObject):
       if self.isKilled:
         self.iterFeat.close()
         break
+      if not self.hasTMS is None:
+        ( isOk, hasTMS) = self.hasTMS( feat['meta_json'], ['TMS', 'isOk'] )
+        if not hasTMS:
+          continue
       image = os.path.join( self.path, formatImage.format( feat['id'] ) )
       if not QtCore.QFile.exists( image ):
         saveTMS( feat, image )
@@ -162,7 +167,8 @@ class WorkerCreateTMS_GDAL_WMS(QtCore.QObject):
     self.isKilled = True
 
 
-class WorkerCreateTMS_ServerXYZ(QtCore.QObject): # Obsolete, need changes!
+# Obsolete, need changes!
+class WorkerCreateTMS_ServerXYZ(QtCore.QObject): 
   finished = QtCore.pyqtSignal( dict )
   stepProgress = QtCore.pyqtSignal( int )
 

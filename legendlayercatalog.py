@@ -319,14 +319,16 @@ class DialogCatalogSetting(QtGui.QDialog):
     date1.dateChanged.connect( self.onDateChanged1 )
 
 class LegendCatalogLayer():
-  def __init__(self, labelMenu, slotTMS):
-    self.labelMenu, self.slotTMS = labelMenu, slotTMS
+  def __init__(self, labelMenu, slotTMS, hasTMS=None):
+    self.labelMenu, self.slotTMS, self.hasTMS = labelMenu, slotTMS, hasTMS
     self.labelTMS = 'Create TMS'
     self.legendInterface = QgsUtils.iface.legendInterface()
     self.layer, self.actionTMS = None, None
 
-  def _getLabelTMS(self):
-    selected = self.layer.selectedFeatureCount()
+  def _getLabelTMS(self,):
+    if not self.hasTMS is None:
+      pass
+    selected = self.layer.selectedFeatureCount() 
     total = self.layer.featureCount()
     prefix = "{} total".format( total )
     if selected > 0:
@@ -336,7 +338,7 @@ class LegendCatalogLayer():
   def clean(self):
     self.legendInterface.removeLegendLayerAction( self.actionTMS )
 
-  def setLayer(self, layer):
+  def setLayer(self, layer, errorTMS=None):
     def addActionLegendLayer():
       lblAction = self._getLabelTMS() 
       action = QtGui.QAction( lblAction, self.legendInterface )

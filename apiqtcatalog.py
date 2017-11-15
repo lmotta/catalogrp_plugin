@@ -19,7 +19,7 @@ email                : motta.luiz@gmail.com
  ***************************************************************************/
 """
 
-import json, datetime
+import json, datetime, os
 
 from PyQt4 import QtCore, QtGui, QtNetwork
 
@@ -230,9 +230,11 @@ class ValueErrorSatellite(ValueError):
 
 
 class API_Catalog(QtCore.QObject):
+  expressionFile = 'catalog_expressions.py'
+  expressionDir = 'expressions'
   def __init__(self, credential=None):
     super( API_Catalog, self ).__init__()
-    self.credential = { 'user': '', 'password': ''} if credential is None else credential
+    self.credential = credential
     self.access = AccessSite()
     self.currentUrl = None
 
@@ -267,15 +269,18 @@ class API_Catalog(QtCore.QObject):
     self.access.finished.connect( finished )
     self.access.run( self.currentUrl, self.credential )
 
-  def getScenes(self, url, setFinished):
+  def requestForJson(self, url, setFinished):
     @QtCore.pyqtSlot(dict)
     def finished( response):
       self.access.finished.disconnect( finished )
       if response[ 'isOk' ]:
-        data = json.loads( str( response['data'] ) )
-        response['results'] = data['results']
-        response['meta_found'] = data['meta']['found']
-        del data['meta'] 
+        isJson = response['statusRequest']['contentTypeHeader'] == 'application/json'
+        response['isJSON'] = isJson
+        if isJson:
+          data = json.loads( str( response['data'] ) )
+          response['results'] = data['results']
+          response['meta_found'] = data['meta']['found']
+          del data['meta']
         
         self._clearResponse( response )
 
@@ -425,3 +430,14 @@ class API_Catalog(QtCore.QObject):
     tw.resizeColumnToContents( 1 )
     
     return tw
+
+  @staticmethod
+  def copyExpression():
+    dirname = os.path.dirname
+    fromExp = os.path.join( dirname( __file__ ), API_Catalog.expressionFile )
+    dirExp = os.path.join( dirname( dirname( dirname( __file__ ) ) ), API_Catalog.expressionDir )
+    toExp = os.path.join( dirExp , API_Catalog.expressionFile )
+    if os.path.isdir( dirExp ):
+      if QtCore.QFile.exists( toExp ):
+        QtCore.QFile.remove( toExp ) 
+      QtCore.QFile.copy( fromExp, toExp ) 

@@ -53,6 +53,15 @@ class API_RP(API_Catalog):
     self.currentUrl = QtCore.QUrl( self.urlImages['landsat-8'] )
     super( API_RP, self ).isHostLive( setFinished )
 
+  def _getSatelliteProductId(self, meta_json, sbands ):
+    ( isOk, satellite) = API_RP.getValue( meta_json, ['satellite_name'] )
+    if not satellite == 'landsat-8':
+      satellite = 'sentinel-2' # satellite_name = Sentinel-2A
+      ( isOk, id ) = API_RP.getValue( meta_json, ['scene_id'] ) 
+    else:
+      ( isOk, id ) = API_RP.getValue( meta_json, ['product_id'] )
+    return ( satellite, id, ','.join( sbands).replace('B', '') )
+
   def getScenes(self, satellite, jsonGeom, date_from, date_to, setFinished):
     """
     Get Json metadata from server.
@@ -67,19 +76,37 @@ class API_RP(API_Catalog):
       raise ValueErrorSatellite( satellite, self.satellites )
 
     url = self.urlSearch.format( satellite=satellite, date_from=date_from, date_to=date_to, geom=json.dumps( jsonGeom ) )
-    url = QtCore.QUrl( url )
-    super( API_RP, self ).getScenes( url, setFinished)
+    self.requestForJson( url, setFinished )
+
+  def existImage(self, meta_json,  sbands):
+    def setFinished(response):
+      if not response['isOk']:
+        substring = "server replied:"
+        msg = response['message']
+        msg = msg[ msg.index( substring ) + len( substring ) + 1 : ]
+        response['message'] = msg
+        del response['errorCode']
+        self.response = response
+      elif response['isJSON']:
+        response['isOk'] = False
+        self.response = response
+      else:
+        self.response = { 'isOk': True }
+      loop.quit()
+
+    self.response = None
+    loop = QtCore.QEventLoop()
+    ( satellite, id, rgb ) = self._getSatelliteProductId( meta_json, sbands )
+    url = "{url}/tiles/{{product_id}}/{{xyz}}.png?rgb={{rgb}}&tile=256&pan=true".format( url=self.urlImages[ satellite ] )
+    url = url.format( product_id=id, xyz='1/1/1',rgb=rgb)
+    super( API_RP, self ).requestForJson( url, setFinished)
+    loop.exec_()
+    return  self.response
 
   def getURL_TMS(self, feat, sbands):
-    ( isOk, satellite) = API_RP.getValue( feat['meta_json'], ['satellite_name'] )
-    if not satellite == 'landsat-8':
-      satellite = 'sentinel-2' # satellite_name = Sentinel-2A
-      product_id = feat['id']
-    else:
-      ( isOk, product_id) = API_RP.getValue( feat['meta_json'], ['product_id'] )
-    rgb = ','.join( sbands).replace('B', '')
+    ( satellite, id, rgb ) = self._getSatelliteProductId( feat['meta_json'], sbands )
     url = "{url}/tiles/{{product_id}}/{{xyz}}.png?rgb={{rgb}}&tile=256&pan=true".format( url=self.urlImages[ satellite ] )
-    url = url.format( product_id=product_id, xyz='{z}/{x}/{y}',rgb=rgb)
+    url = url.format( product_id=id, xyz='{z}/{x}/{y}',rgb=rgb)
     return url
 
 
@@ -108,8 +135,6 @@ class CatalogRP(QtCore.QObject):
 
   pluginName = u'Catalog Remote Pixel'
   styleFile = 'rp_scenes.qml'
-  expressionFile = 'rp_expressions.py'
-  expressionDir = 'expressions'
 
   enableRun = QtCore.pyqtSignal( bool )
   
@@ -135,7 +160,7 @@ class CatalogRP(QtCore.QObject):
     self.currentItem, self.stepProcessing = None, None
     self.catalog = { 'ltg': None, 'satellite': None }
 
-    arg = ( CatalogRP.pluginName, self.CreateTMS_GDAL_WMS )
+    arg = ( CatalogRP.pluginName, self.CreateTMS_GDAL_WMS, API_RP.getValue )
     self.legendCatalogLayer = LegendCatalogLayer( *arg )
     
     self.settings = DialogCatalogSettingRP.getSettings( DialogCatalogSettingRP.configQGIS )
@@ -307,7 +332,7 @@ class CatalogRP(QtCore.QObject):
           self.messageProcess = None
           self.scenesResponse = None
 
-      def getFeature(itemResponse, fields):
+      def getFeature(itemResponse, fields, existImage, rgb):
         # Fields
         # 'id', 'acquired', 'thumbnail', 'meta_html', 'meta_json', 'meta_jsize'
         vFields =  { }
@@ -328,7 +353,13 @@ class CatalogRP(QtCore.QObject):
               qpolygon = map ( lambda polyline: map( lambda item: QgsCore.QgsPoint( item[0], item[1] ), polyline ), polygon )
               qmultipolygon.append( qpolygon )
           geom = QgsCore.QgsGeometry.fromMultiPolygon( qmultipolygon )
-        del itemResponse['data_geometry'] 
+        del itemResponse['data_geometry']
+        #
+        r =  existImage( itemResponse, rgb )
+        itemResponse['TMS'] = { 'isOk': r['isOk'] }
+        if not r['isOk']:
+          itemResponse['TMS']['message'] = r['message']
+        #
         vFields[ fields[3] ] = API_RP.getHtmlTreeMetadata( itemResponse, '')
         vjson = json.dumps(  itemResponse )
         vFields[ fields[4] ] = vjson
@@ -338,7 +369,7 @@ class CatalogRP(QtCore.QObject):
           feat.setGeometry( geom )
         atts = map( lambda item: vFields[ item ], fields )
         feat.setAttributes( atts )
-        return feat
+        return feat, itemResponse['TMS']['isOk']
 
       def commitFeatures(features):
         if not self.layer is None and len( features ) > 0:
@@ -371,7 +402,7 @@ class CatalogRP(QtCore.QObject):
         extent = self.canvas.extent() if crsCanvas == crsLayer else ct.transform( self.canvas.extent() )
         return json.loads( QgsCore.QgsGeometry.fromRect( extent ).exportToGeoJSON() )
 
-      def finished():
+      def finished( errorTMS ):
         self.canvas.scene().removeItem( rb )
         if not self.hasCriticalMessage:
           self.msgBar.popWidget()
@@ -387,6 +418,10 @@ class CatalogRP(QtCore.QObject):
             removeFeatures()
           typeMessage = QgsGui.QgsMessageBar.WARNING
           msg = "Canceled the search of images. Removed {} features"
+        elif errorTMS > 0:
+          msg = "Finished the search of images. Found '{{}}' images - Missing '{}' TMS".format( errorTMS )
+          typeMessage = QgsGui.QgsMessageBar.WARNING        
+
         msg = msg.format( self.stepProcessing )
         self.msgBar.pushMessage( CatalogRP.pluginName, msg, typeMessage, 4 )
 
@@ -414,30 +449,36 @@ class CatalogRP(QtCore.QObject):
         self.msgBar.pushMessage( CatalogRP.pluginName, msg, QgsGui.QgsMessageBar.WARNING, 2 )
         return
       if self.scenesFound > totalImage:
+        del self.scenesResponse[:]
         self.canvas.scene().removeItem( rb )
-        msg = "Exceeded the total for request. Please select a less area in map."
+        msg = "Exceeded the limit for request({}), return {}. Please select a less area in map."
+        msg = msg.format( totalImage, self.scenesFound )
         self.msgBar.popWidget()
-        self.msgBar.pushMessage( CatalogRP.pluginName, msg, QgsGui.QgsMessageBar.WARNING, 2 )
+        self.msgBar.pushMessage( CatalogRP.pluginName, msg, QgsGui.QgsMessageBar.WARNING, 4 )
         return
 
       self.msgBar.popWidget()
       msg = "Creating {} catalog ({} total)".format( satellite, totalImage )
       self.mbcancel = MessageBarCancel( CatalogRP.pluginName, self.msgBar, msg, self.apiServer.kill )
 
+      errorTMS = 0
       self.stepProcessing = 0
       features = []
       fields = [ 'id', 'acquired', 'thumbnail', 'meta_html', 'meta_json', 'meta_jsize' ] # See FIELDs order from createLayer
       for item in self.scenesResponse:
         if self.mbcancel.isCancel or self.layer is None :
           break
-        features.append( getFeature(item, fields ) )
+        feat, isOk =  getFeature(item, fields, self.apiServer.existImage, self.settings['rgb'] )
+        features.append( feat )
+        if not isOk:
+          errorTMS += 1
         msg = "Adding {}/{} features...".format( self.stepProcessing, totalImage  )
         self.mbcancel.message( msg )
         self.stepProcessing += 1
 
       commitFeatures( features )
       del features[:]
-      finished()
+      finished( errorTMS )
 
     if not hasSettingPath():
       return
@@ -574,20 +615,10 @@ class CatalogRP(QtCore.QObject):
       'ltgCatalog': self.catalog['ltg'],
       'id_layer': self.layer.id(),
       'ctTMS': ctTMS,
-      'iterFeat': iterFeat # feat: 'id', 'acquired', 'meta_json'
+      'iterFeat': iterFeat, # feat: 'id', 'acquired', 'meta_json'
+      'hasTMS': API_RP.getValue
     }
     self.worker.setting( data )
     self.worker.stepProgress.connect( self.mbcancel.step )
     #self.thread.start() # Start Worker
     self.worker.run()    # DEBUGER
-
-  @staticmethod
-  def copyExpression():
-    dirname = os.path.dirname
-    fromExp = os.path.join( dirname( __file__ ), CatalogRP.expressionFile )
-    dirExp = os.path.join( dirname( dirname( dirname( __file__ ) ) ), CatalogRP.expressionDir )
-    toExp = os.path.join( dirExp , CatalogRP.expressionFile )
-    if os.path.isdir( dirExp ):
-      if QtCore.QFile.exists( toExp ):
-        QtCore.QFile.remove( toExp ) 
-      QtCore.QFile.copy( fromExp, toExp ) 

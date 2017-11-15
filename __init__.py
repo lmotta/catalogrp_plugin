@@ -24,7 +24,7 @@ import os
 from PyQt4 import QtCore, QtGui
 from qgis import core as QgsCore, gui as QgsGui
 
-from catalogrp import CatalogRP
+from catalogrp import CatalogRP, API_Catalog
 
 def classFactory(iface):
     return CatalogRPPlugin( iface )
@@ -41,7 +41,7 @@ class CatalogRPPlugin:
         self.msgBar = iface.messageBar()
         self.ctl = CatalogRP( CatalogRPPlugin.icon )
 
-        CatalogRP.copyExpression()
+        API_Catalog.copyExpression()
     
     def initGui(self):
         dataActions = [
