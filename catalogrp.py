@@ -24,12 +24,83 @@ import os, json
 from PyQt4 import QtCore, QtGui
 from qgis import core as QgsCore, gui as QgsGui, utils as QgsUtils
 
-from apiqtrp import API_RP
-from legendlayerrp import ( DialogImageSettingRP, LegendCatalogLayer )
-from legendlayer import LegendRasterGeom
+from apiqtcatalog import API_Catalog
+from legendlayercatalog import ( DialogCatalogSetting, LegendCatalogLayer )
+from legendlayerraster import LegendRasterGeom
 from messagebarcancel import MessageBarCancel, MessageBarCancelProgress
 from workertms import WorkerCreateTMS_GDAL_WMS 
 
+
+class API_RP(API_Catalog):
+  def __init__(self):
+    self.satellites = ['landsat-8', 'sentinel-2']    
+    l_url = [
+      'https://api.developmentseed.org/satellites/?limit=200',
+      'satellite_name={satellite}',
+      'date_from={date_from}', 'date_to={date_to}',
+      'intersects={geom}'
+    ]
+    self.urlSearch = '&'.join( l_url )
+    self.urlImages = {
+        'landsat-8': "https://mn2iekg7k7.execute-api.us-west-2.amazonaws.com/production/landsat",
+        'sentinel-2': "https://jmcka7torb.execute-api.eu-central-1.amazonaws.com/production/sentinel"
+    }
+    #
+    API_RP.title = 'Catalog Remote Pixel'
+    super( API_RP, self ).__init__()
+  
+  def isHostLive(self, setFinished):
+    self.currentUrl = QtCore.QUrl( self.urlImages['landsat-8'] )
+    super( API_RP, self ).isHostLive( setFinished )
+
+  def getScenes(self, satellite, jsonGeom, date_from, date_to, setFinished):
+    """
+    Get Json metadata from server.
+    Params:
+      satellite:   Name of satellite
+      jsonGeom:    Geojson of Geometry { 'type': 'Polygon', 'coordinates': [...] }
+      dateFrom:    Start date (AAA-mm-DD)
+      dateTo:      End date(AAA-mm-DD)
+      setFinished: Method to send response
+    """
+    if not satellite in self.satellites:
+      raise ValueErrorSatellite( satellite, self.satellites )
+
+    url = self.urlSearch.format( satellite=satellite, date_from=date_from, date_to=date_to, geom=json.dumps( jsonGeom ) )
+    url = QtCore.QUrl( url )
+    super( API_RP, self ).getScenes( url, setFinished)
+
+  def getURL_TMS(self, feat, sbands):
+    ( isOk, satellite) = API_RP.getValue( feat['meta_json'], ['satellite_name'] )
+    ( isOk, product_id) = API_RP.getValue( feat['meta_json'], ['product_id'] )
+    rgb = ','.join( sbands)
+    if satellite == 'landsat-8':
+      rgb = rgb.replace('B', '')
+    url = "{url}/tiles/{{product_id}}/{{xyz}}.png?rgb={{rgb}}&tile=256&pan=true".format( url=self.urlImages[ satellite ] )
+    url = url.format( product_id=product_id, xyz='{z}/{x}/{y}',rgb=rgb)
+    return url
+
+
+class DialogCatalogSettingRP(DialogCatalogSetting):
+  configQGIS = 'catalogrp_plugin' # ~/.config/QGIS/QGIS2.conf
+  def __init__(self, parent, icon, dataSetting):
+    bandsLandsat1_5  =  [ "B{:d}".format(n)   for n in xrange(1,6) ]
+    bandsSentinel2_8 =  [ "B{:02d}".format(n) for n in xrange(2,9) ]
+    satellites = {
+      'landsat-8':  { 'dates': 'Since 2013',  'bands': bandsLandsat1_5 + ['B6','B7','B9'] },
+      'sentinel-2': { 'dates': 'Since 2015',  'bands': bandsSentinel2_8 + ['B8A','B11','B12'] }
+    }
+    #
+    arg = ( parent, icon, dataSetting, satellites, DialogCatalogSettingRP.configQGIS, DialogCatalogSettingRP.getVegetationBands )
+    super( DialogCatalogSettingRP, self ).__init__( *arg )
+
+  @staticmethod
+  def getVegetationBands(satellite):
+    if satellite == 'landsat-8':
+      return ['B6', 'B5', 'B4']
+    else: # sentinel2
+      return ['B11', 'B8A', 'B04']
+    
 
 class CatalogRP(QtCore.QObject):
 
@@ -42,6 +113,7 @@ class CatalogRP(QtCore.QObject):
   
   def __init__(self, icon):
     super(CatalogRP, self).__init__()
+    self.catalogName = "Remote Pixel"
     self.canvas = QgsUtils.iface.mapCanvas()
     self.msgBar = QgsUtils.iface.messageBar()
     self.logMessage = QgsCore.QgsMessageLog.instance().logMessage
@@ -58,13 +130,15 @@ class CatalogRP(QtCore.QObject):
     self.hasCriticalMessage = None
     self.scenesResponse, self.scenesFound = None, None
     self.messageProcess = self.isOkProcess = None
-    self.legendCatalogLayer, self.settings = None, None
     self.currentItem, self.stepProcessing = None, None
     self.catalog = { 'ltg': None, 'satellite': None }
 
     arg = ( CatalogRP.pluginName, self.CreateTMS_GDAL_WMS )
     self.legendCatalogLayer = LegendCatalogLayer( *arg )
-    self.settings = DialogImageSettingRP.getSettings()
+    
+    self.settings = DialogCatalogSettingRP.getSettings( DialogCatalogSettingRP.configQGIS )
+    self.settings['satellite'] = 'landsat-8'
+    self.settings['rgb'] = DialogCatalogSettingRP.getVegetationBands( self.settings['satellite'] )
 
     self._connect()
     self._initThread()
@@ -172,8 +246,8 @@ class CatalogRP(QtCore.QObject):
   def createLayerScenes(self):
     def hasSettingPath():
       # self.settings setting by __init__.setSearchSettings()
-      if self.settings['path'] == DialogImageSettingRP.titleSelectDirectory:
-        msg = "Please, {0}".format( DialogImageSettingRP.titleSelectDirectory )
+      if self.settings['path'] == DialogCatalogSettingRP.titleSelectDirectory:
+        msg = "Please, {0}".format( DialogCatalogSettingRP.titleSelectDirectory )
         self.msgBar.pushMessage( CatalogRP.pluginName, msg, QgsGui.QgsMessageBar.WARNING, 6 )
         return False
       return True
@@ -191,7 +265,7 @@ class CatalogRP(QtCore.QObject):
       
       date1 = self.settings['date1'].toString( QtCore.Qt.ISODate )
       date2 = self.settings['date2'].toString( QtCore.Qt.ISODate )
-      name = "EOS {}({} to {})".format( self.settings['satellite'], date1, date2)
+      name = "{} {}({} to {})".format( self.catalogName,self.settings['satellite'], date1, date2)
       vl = QgsCore.QgsVectorLayer( uri, name, "memory" )
       # Add layer
       self.layer = QgsCore.QgsMapLayerRegistry.instance().addMapLayer( vl, addToLegend=False )
@@ -381,16 +455,16 @@ class CatalogRP(QtCore.QObject):
 
   def settingImages(self):
     def addSizeTMS():
-      if self.settings['path'] == DialogImageSettingRP.titleSelectDirectory:
+      if self.settings['path'] == DialogCatalogSettingRP.titleSelectDirectory:
         self.settings['size_tms'] = 0
       else:
-        self.settings['size_tms'] = DialogImageSettingRP.getSizeTMS( self.settings['path'] )
+        self.settings['size_tms'] = DialogCatalogSettingRP.getSizeTMS( self.settings['path'] )
 
     msg = "Calculating TMS cache..."
     self.msgBar.pushMessage( self.pluginName, msg, QgsGui.QgsMessageBar.INFO )
     addSizeTMS()
     self.msgBar.popWidget()
-    dlg = DialogImageSettingRP( self.mainWindow, self.settings, self.icon )
+    dlg = DialogCatalogSettingRP( self.mainWindow, self.icon, self.settings )
     if dlg.exec_() == QtGui.QDialog.Accepted:
       self.settings = dlg.getData()
 
@@ -462,7 +536,7 @@ class CatalogRP(QtCore.QObject):
   
       def setNameGroupCatalog(total):
         rgb = ','.join( self.settings['rgb'] )
-        name = "RP Catalog {} ({}) [{}]".format( self.catalog['satellite'], rgb, total )
+        name = "{} Catalog {} ({}) [{}]".format( self.catalogName, self.catalog['satellite'], rgb, total )
         self.catalog['ltg'].setName( name )
 
       layers = getLayers()
@@ -492,7 +566,7 @@ class CatalogRP(QtCore.QObject):
     self.worker.finished.connect( finished )
     data = {
       'pluginName': CatalogRP.pluginName,
-      'getURL': API_RP.getURL_TMS, 
+      'getURL': self.apiServer.getURL_TMS, 
       'path': self.settings['path'],
       'rgb': self.settings['rgb'],
       'ltgCatalog': self.catalog['ltg'],

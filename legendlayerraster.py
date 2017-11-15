@@ -2,9 +2,9 @@
 """
 /***************************************************************************
 Name                 : Legend Layer
-Description          : Classes for add legend in layer
-Date                 : July, 2015
-copyright            : (C) 2015 by Luiz Motta
+Description          : Classes for add legend in Raster Layerayer
+Date                 : November, 2017
+copyright            : (C) 2017 by Luiz Motta
 email                : motta.luiz@gmail.com
 
  ***************************************************************************/

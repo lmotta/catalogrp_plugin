@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
 /***************************************************************************
-Name                 : Qt API for Catalog Planet Labs 
-Description          : API for Remote Pixel and Development Seed
-Date                 : May, 2015
-copyright            : (C) 2015 by Luiz Motta
+Name                 : Qt API for Catalog
+Description          : Abstract Class for Catalog API
+Date                 : November, 2017
+copyright            : (C) 2018 by Luiz Motta
 email                : motta.luiz@gmail.com
 
  ***************************************************************************/
@@ -222,19 +222,17 @@ class AccessSite(QtCore.QObject):
     self.reply.ignoreSslErrors()
 
 
-class API_RP(QtCore.QObject):
+class ValueErrorSatellite(ValueError):
+  def __init__(self, satellite, satellites):
+    msg = "Catalog: Invalid '{}'. Values are {}".format( satellite, ','.join( satellites ) )
+    self.strerror = msg
+    self.args = { msg }
 
-  errorCodeLimitOK = (201, 207) # https://en.wikipedia.org/wiki/List_of_HTTP_status_codes (2107-09-30)
-  validKey = None
-  urlImages = {
-    'landsat-8': "https://mn2iekg7k7.execute-api.us-west-2.amazonaws.com/production/landsat",
-    'sentinel-2': "https://jmcka7torb.execute-api.eu-central-1.amazonaws.com/production/sentinel"
-  }
-  urlSearch = "https://api.developmentseed.org/satellites/?limit=200&satellite_name={satellite}&date_from={date_from}&date_to={date_to}&intersects={geom}"
-  satellites = ['landsat-8', 'sentinel-2']
 
-  def __init__(self):
-    super( API_RP, self ).__init__()
+class API_Catalog(QtCore.QObject):
+  def __init__(self, credential=None):
+    super( API_Catalog, self ).__init__()
+    self.credential = { 'user': '', 'password': ''} if credential is None else credential
     self.access = AccessSite()
     self.currentUrl = None
 
@@ -266,22 +264,10 @@ class API_RP(QtCore.QObject):
 
       setFinished( response )
 
-    self.currentUrl = API_RP.urlImages['landsat-8']
-    url = QtCore.QUrl( self.currentUrl )
     self.access.finished.connect( finished )
-    credential = { 'user': '', 'password': ''}
-    self.access.run( url, credential )
+    self.access.run( self.currentUrl, self.credential )
 
-  def getScenes(self, satellite, jsonGeom, dateFrom, dateTo, setFinished):
-    """
-    Get Json metadata from server.
-    Params:
-      satellite:   Name of satellite (see API_RP.satellites)
-      jsonGeom:    Geojson of Geometry { 'type': 'Polygon', 'coordinates': [...] }
-      dateFrom:    Start date (AAA-mm-DD)
-      dateTo:      End date(AAA-mm-DD)
-      setFinished: Method to send response
-    """
+  def getScenes(self, url, setFinished):
     @QtCore.pyqtSlot(dict)
     def finished( response):
       self.access.finished.disconnect( finished )
@@ -295,13 +281,8 @@ class API_RP(QtCore.QObject):
 
       setFinished( response )
 
-    geom = json.dumps( jsonGeom )
-    url = API_RP.urlSearch.format( satellite=satellite, date_from=dateFrom, date_to=dateTo, geom=geom )
-    self.currentUrl = url
-    url = QtCore.QUrl( self.currentUrl )
     self.access.finished.connect( finished )
-    credential = { 'user': '', 'password': ''}
-    self.access.run( url, credential )
+    self.access.run( QtCore.QUrl( url ), self.credential )
 
   @staticmethod
   def getValue(jsonMetadataFeature, keys):
@@ -313,26 +294,14 @@ class API_RP(QtCore.QObject):
     try:
       value = reduce( lambda d, k: d[ k ], [ dicMetadata ] + keys )
     except KeyError as e:
-      msgError = "Catalog Remote Pixel: Have invalid key: %s" % ' -> '.join( e_keys)
+      msgError = "Catalog: Have invalid key: {}".format( ' -> '.join( e_keys) )
     except TypeError as e:
-      msgError = "Catalog Remote Pixel: The last key is invalid: %s" % ' -> '.join( e_keys)
+      msgError = "Catalog: The last key is invalid: {}".format( ' -> '.join( e_keys) )
 
     if msgError is None and isinstance( value, dict):
-      msgError = "Catalog Remote Pixel: Missing key: %s" % ' -> '.join( e_keys)
+      msgError = "Catalog: Missing key: {}".format( ' -> '.join( e_keys) )
 
     return ( True, value ) if msgError is None else ( False, msgError ) 
-
-  @staticmethod
-  def getURL_TMS(feat, sbands):
-    ( isOk, satellite) = API_RP.getValue( feat['meta_json'], [ 'satellite_name' ] )
-    ( isOk, product_id) = API_RP.getValue( feat['meta_json'], [ 'product_id' ] )
-    
-    rgb = ','.join( sbands)
-    if satellite == 'landsat-8':
-      rgb = rgb.replace('B', '')
-    url = "{url}/tiles/{{product_id}}/{{xyz}}.png?rgb={{rgb}}&tile=256&pan=true".format( url=API_RP.urlImages[ satellite ] )
-    url = url.format( product_id=product_id, xyz='{z}/{x}/{y}',rgb=rgb)
-    return url
 
   @staticmethod
   def getTextTreeMetadata( jsonMetadataFeature ):
@@ -375,7 +344,7 @@ class API_RP(QtCore.QObject):
           html += "<li>%s: %s</li> " % ( key, val )
         else:
           html += "<li>%s</li> " % key
-        html = API_RP.getHtmlTreeMetadata( val, html )
+        html = API_Catalog.getHtmlTreeMetadata( val, html )
       html += "</ul>"
       return html
     return html

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 /***************************************************************************
-Name                 : Catalog Remote Pixel
+Name                 : Catalog Dialog and Layer
 Description          : Create catalog from Remote Pixel
 Date                 : November, 2017
 copyright            : (C) 2017 by Luiz Motta
@@ -24,20 +24,17 @@ import os, shutil
 from PyQt4 import QtCore, QtGui, QtXml
 from qgis import core as QgsCore, gui as QgsGui, utils as QgsUtils
 
-class DialogImageSettingRP(QtGui.QDialog):
-
-  localSetting = "catalogrp_plugin" # ~/.config/QGIS/QGIS2.conf
+class DialogCatalogSetting(QtGui.QDialog):
   titleSelectDirectory = "Select directory for TMS"
-
-  def __init__(self, parent, data, icon=None):
+  def __init__(self, parent, icon, dataSetting, satellites, configQGIS, getVegetationBands):
     def initGui():
       def setData():
         w = self.findChild( QtGui.QRadioButton, self.data['satellite'] )
         w.setChecked(True)
         self._populateRGB( self.data['satellite'] )
         buttonPath.setText( self.data['path'] )
-        buttonClearCache.setText( self.titleClearCache.format( data['size_tms'] ) )
-        if data['size_tms'] > 0:
+        buttonClearCache.setText( self.titleClearCache.format( self.data['size_tms'] ) )
+        if self.data['size_tms'] > 0:
           buttonClearCache.setEnabled(True)
         d1 = self.data['date1']
         d2 = self.data['date2']
@@ -95,7 +92,7 @@ class DialogImageSettingRP(QtGui.QDialog):
         lyt.addWidget( w )
         lytRGB.addLayout( lyt )
 
-      buttonPath = QtGui.QPushButton( DialogImageSettingRP.titleSelectDirectory, grpImage )
+      buttonPath = QtGui.QPushButton( DialogCatalogSetting.titleSelectDirectory, grpImage )
       buttonPath.setObjectName('path')
 
       text = "Clear TMS cache (total calculating..)" 
@@ -132,15 +129,10 @@ class DialogImageSettingRP(QtGui.QDialog):
       setData()
       connect()
 
-    super( DialogImageSettingRP, self ).__init__( parent )
-    self.data = data
+    super( DialogCatalogSetting, self ).__init__( parent )
+    self.data, self.satellites  = dataSetting, satellites
+    self.configQGIS, self.getVegetationBands = configQGIS, getVegetationBands
     self.titleClearCache = "Clear TMS cache (total {:0.2f}MB)"
-    bandsLandsat1_5 =   [ "B{:d}".format(n)   for n in xrange(1,6) ]
-    bandsSentinel2_8 =  [ "B{:02d}".format(n) for n in xrange(2,9) ]
-    self.satellites = {
-      'landsat-8':  { 'dates': 'Since 2013',  'bands': bandsLandsat1_5 + ['B6','B7','B9'] },
-      'sentinel-2': { 'dates': 'Since 2015',  'bands': bandsSentinel2_8 + ['B8A','B11','B12'] }
-    }
     initGui()
 
   def getData(self):
@@ -165,7 +157,7 @@ class DialogImageSettingRP(QtGui.QDialog):
     keys = ['path' ]
     values = {}
     for k in keys:
-      values[ k ] = "{0}/{1}".format( DialogImageSettingRP.localSetting, k )
+      values[ k ] = "{0}/{1}".format( self.configQGIS, k )
     s = QtCore.QSettings()
     for k in values.keys():
       s.setValue( values[ k ], self.data[ k ] )
@@ -177,21 +169,14 @@ class DialogImageSettingRP(QtGui.QDialog):
     spinDay.valueChanged.connect( self.onValueChanged )
 
   @staticmethod
-  def getVegetationBands(satellite):
-    if satellite == 'landsat-8':
-      return ['B6', 'B5', 'B4']
-    else: # sentinel2
-      return ['B11', 'B8A', 'B04']
-
-  @staticmethod
-  def getSettings():
+  def getSettings(configQGIS):
     # Next step add all informations
     #See __init__.initGui
-    #keys = ['path', 'landsat-8', 'sentinel-2', 'date1', 'date2']
+    #keys = ['path', 'satellite', 'date1', 'date2', 'rgb' ]
     keys = ['path']
     values = {}
     for k in keys:
-      values[ k ] = "{0}/{1}".format( DialogImageSettingRP.localSetting, k )
+      values[ k ] = "{0}/{1}".format( configQGIS, k )
     s = QtCore.QSettings()
     data = {}
     # Path
@@ -200,13 +185,13 @@ class DialogImageSettingRP(QtGui.QDialog):
       if QtCore.QDir( path ).exists():
         data['path'] = path
       else:
-        data['path'] = DialogImageSettingRP.titleSelectDirectory 
+        data['path'] = DialogCatalogSetting.titleSelectDirectory 
         s.remove( values['path'] )
     else:
-      data['path'] = DialogImageSettingRP.titleSelectDirectory
+      data['path'] = DialogCatalogSetting.titleSelectDirectory
     #
-    data['satellite'] = 'landsat-8'
-    data['rgb'] = DialogImageSettingRP.getVegetationBands('landsat-8')
+    data['satellite'], data['rgb'] = None, None # set after return. Will be change when add all informations
+    #
     data['date2'] = QtCore.QDate.currentDate()
     data['date1'] = data['date2'].addMonths( -1 )
 
@@ -229,7 +214,7 @@ class DialogImageSettingRP(QtGui.QDialog):
       if os.path.isfile( absdir( f ) ):
         total_size += os.path.getsize( absdir( f ) ) / 1024.0
     # Directories TMS
-    dirs = DialogImageSettingRP.getDirsCacheTMS( path )
+    dirs = DialogCatalogSetting.getDirsCacheTMS( path )
     if len( dirs ) == 0:
       return total_size
     for item in dirs: 
@@ -257,7 +242,7 @@ class DialogImageSettingRP(QtGui.QDialog):
 
     pb = self.findChild( QtGui.QPushButton, 'path' )
     path = pb.text()
-    if path == DialogImageSettingRP.titleSelectDirectory:
+    if path == DialogCatalogSetting.titleSelectDirectory:
       msg = "Please, {0}".format( self.titleSelectDirectory )
       QtGui.QMessageBox.information( self, "Missing directory for download", msg )
       return
@@ -279,9 +264,9 @@ class DialogImageSettingRP(QtGui.QDialog):
   def onPath(self):
     w = self.findChild( QtGui.QPushButton, 'path' )
     path = w.text()
-    if path == DialogImageSettingRP.titleSelectDirectory:
+    if path == DialogCatalogSetting.titleSelectDirectory:
       path = None
-    sdir = QtGui.QFileDialog.getExistingDirectory(self, DialogImageSettingRP.titleSelectDirectory, path )
+    sdir = QtGui.QFileDialog.getExistingDirectory(self, DialogCatalogSetting.titleSelectDirectory, path )
     if len(sdir) > 0:
       w.setText( sdir )
 
@@ -294,7 +279,7 @@ class DialogImageSettingRP(QtGui.QDialog):
     absdir = lambda d: os.path.join( path, d)
     [ os.remove( absdir( f ) ) for f in os.listdir( path ) if os.path.isfile( absdir( f ) ) ]
     # Remove Directories
-    dirs = DialogImageSettingRP.getDirsCacheTMS( path )
+    dirs = DialogCatalogSetting.getDirsCacheTMS( path )
     if not len( dirs ) == 0:
       for d in dirs:
         shutil.rmtree(d)

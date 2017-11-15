@@ -26,8 +26,6 @@ from qgis import core as QgsCore, gui as QgsGui
 
 from catalogrp import CatalogRP
 
-from apiqtrp import API_RP # Use for expression
-
 def classFactory(iface):
     return CatalogRPPlugin( iface )
 
