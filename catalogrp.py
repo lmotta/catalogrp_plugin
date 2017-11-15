@@ -35,7 +35,7 @@ class API_RP(API_Catalog):
   def __init__(self):
     self.satellites = ['landsat-8', 'sentinel-2']    
     l_url = [
-      'https://api.developmentseed.org/satellites/?limit=200',
+      'https://api.developmentseed.org/satellites/?limit=2000',
       'satellite_name={satellite}',
       'date_from={date_from}', 'date_to={date_to}',
       'intersects={geom}'
@@ -72,10 +72,12 @@ class API_RP(API_Catalog):
 
   def getURL_TMS(self, feat, sbands):
     ( isOk, satellite) = API_RP.getValue( feat['meta_json'], ['satellite_name'] )
-    ( isOk, product_id) = API_RP.getValue( feat['meta_json'], ['product_id'] )
-    rgb = ','.join( sbands)
-    if satellite == 'landsat-8':
-      rgb = rgb.replace('B', '')
+    if not satellite == 'landsat-8':
+      satellite = 'sentinel-2' # satellite_name = Sentinel-2A
+      product_id = feat['id']
+    else:
+      ( isOk, product_id) = API_RP.getValue( feat['meta_json'], ['product_id'] )
+    rgb = ','.join( sbands).replace('B', '')
     url = "{url}/tiles/{{product_id}}/{{xyz}}.png?rgb={{rgb}}&tile=256&pan=true".format( url=self.urlImages[ satellite ] )
     url = url.format( product_id=product_id, xyz='{z}/{x}/{y}',rgb=rgb)
     return url
