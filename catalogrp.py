@@ -54,12 +54,12 @@ class API_RP(API_Catalog):
     super( API_RP, self ).isHostLive( setFinished )
 
   def _getSatelliteProductId(self, meta_json, sbands ):
-    ( isOk, satellite) = API_RP.getValue( meta_json, ['satellite_name'] )
+    satellite = meta_json['satellite_name']
     if not satellite == 'landsat-8':
       satellite = 'sentinel-2' # satellite_name = Sentinel-2A
-      ( isOk, id ) = API_RP.getValue( meta_json, ['scene_id'] ) 
+      id = meta_json['scene_id'] 
     else:
-      ( isOk, id ) = API_RP.getValue( meta_json, ['product_id'] )
+      id = meta_json['product_id']
     return ( satellite, id, ','.join( sbands).replace('B', '') )
 
   def getScenes(self, satellite, jsonGeom, date_from, date_to, setFinished):
@@ -105,7 +105,8 @@ class API_RP(API_Catalog):
     return  self.response
 
   def getURL_TMS(self, feat, sbands):
-    ( satellite, id, rgb ) = self._getSatelliteProductId( feat['meta_json'], sbands )
+    meta_json = json.loads( feat['meta_json'] )
+    ( satellite, id, rgb ) = self._getSatelliteProductId( meta_json, sbands )
     url = "{url}/tiles/{{product_id}}/{{xyz}}.png?rgb={{rgb}}&tile=256&pan=true".format( url=self.urlImages[ satellite ] )
     url = url.format( product_id=id, xyz='{z}/{x}/{y}',rgb=rgb)
     return url
@@ -161,7 +162,7 @@ class CatalogRP(QtCore.QObject):
     self.currentItem, self.stepProcessing = None, None
     self.catalog = { 'ltg': None, 'satellite': None }
 
-    arg = ( CatalogRP.pluginName, self.CreateTMS_GDAL_WMS, API_RP.getValue )
+    arg = ( CatalogRP.pluginName, self.createTMS_GDAL_WMS, self.verifyTMS )
     self.legendCatalogLayer = LegendCatalogLayer( *arg )
     
     self.settings = DialogCatalogSettingRP.getSettings( DialogCatalogSettingRP.configQGIS )
@@ -333,7 +334,7 @@ class CatalogRP(QtCore.QObject):
           self.messageProcess = None
           self.scenesResponse = None
 
-      def getFeature(itemResponse, fields, existImage, rgb):
+      def getFeature(itemResponse, fields):
         # Fields
         # 'id', 'acquired', 'thumbnail', 'meta_html', 'meta_json', 'meta_jsize'
         vFields =  { }
@@ -356,11 +357,7 @@ class CatalogRP(QtCore.QObject):
           geom = QgsCore.QgsGeometry.fromMultiPolygon( qmultipolygon )
         del itemResponse['data_geometry']
         #
-        r =  existImage( itemResponse, rgb )
-        itemResponse['TMS'] = { 'isOk': r['isOk'] }
-        if not r['isOk']:
-          itemResponse['TMS']['message'] = r['message']
-        #
+        itemResponse['TMS'] = { 'isOk': True, 'hasChecking': False }
         vFields[ fields[3] ] = API_RP.getHtmlTreeMetadata( itemResponse, '')
         vjson = json.dumps(  itemResponse )
         vFields[ fields[4] ] = vjson
@@ -370,7 +367,7 @@ class CatalogRP(QtCore.QObject):
           feat.setGeometry( geom )
         atts = map( lambda item: vFields[ item ], fields )
         feat.setAttributes( atts )
-        return feat, itemResponse['TMS']['isOk']
+        return feat
 
       def commitFeatures(features):
         if not self.layer is None and len( features ) > 0:
@@ -403,7 +400,7 @@ class CatalogRP(QtCore.QObject):
         extent = self.canvas.extent() if crsCanvas == crsLayer else ct.transform( self.canvas.extent() )
         return json.loads( QgsCore.QgsGeometry.fromRect( extent ).exportToGeoJSON() )
 
-      def finished( noTMS ):
+      def finished():
         self.canvas.scene().removeItem( rb )
         if not self.hasCriticalMessage:
           self.msgBar.popWidget()
@@ -411,17 +408,13 @@ class CatalogRP(QtCore.QObject):
         if self.layer is None:
           return
 
-        msg = "Finished the search of images. Found {} images"
+        msg = "Finished the search of images. Found {} images (some images may not have the TMS)"
         typeMessage = QgsGui.QgsMessageBar.INFO
         if self.mbcancel.isCancel:
           self.msgBar.popWidget()
-          if self.layer is None:
-            removeFeatures()
+          removeFeatures()
           typeMessage = QgsGui.QgsMessageBar.WARNING
           msg = "Canceled the search of images. Removed {} features"
-        elif noTMS > 0:
-          msg = "Finished the search of images. Found '{{}}' images - Missing '{}' TMS".format( noTMS )
-          typeMessage = QgsGui.QgsMessageBar.WARNING        
 
         msg = msg.format( self.stepProcessing )
         self.msgBar.pushMessage( CatalogRP.pluginName, msg, typeMessage, 4 )
@@ -432,7 +425,7 @@ class CatalogRP(QtCore.QObject):
       date1, date2 = date1.toString( QtCore.Qt.ISODate ), date2.toString( QtCore.Qt.ISODate )
 
       self.msgBar.clearWidgets()
-      msg = "Starting the search of images - %s(%d days)..." % ( date2, days )
+      msg = "Starting the search of images - {}({} days)...".format( date2, days )
       self.mbcancel = MessageBarCancel( CatalogRP.pluginName, self.msgBar, msg, self.apiServer.kill )
       rb = createRubberBand() # Show Rectangle of Query (coordinate in pixel)
 
@@ -462,24 +455,21 @@ class CatalogRP(QtCore.QObject):
       msg = "Creating {} catalog ({} total)".format( satellite, totalImage )
       self.mbcancel = MessageBarCancel( CatalogRP.pluginName, self.msgBar, msg, self.apiServer.kill )
 
-      noTMS = 0
       self.stepProcessing = 0
       features = []
       fields = [ 'id', 'acquired', 'thumbnail', 'meta_html', 'meta_json', 'meta_jsize' ] # See FIELDs order from createLayer
       for item in self.scenesResponse:
         if self.mbcancel.isCancel or self.layer is None :
           break
-        feat, isOk =  getFeature(item, fields, self.apiServer.existImage, self.settings['rgb'] )
+        feat  =  getFeature( item, fields )
         features.append( feat )
-        if not isOk:
-          noTMS += 1
         msg = "Adding {}/{} features...".format( self.stepProcessing, totalImage  )
         self.mbcancel.message( msg )
         self.stepProcessing += 1
 
       commitFeatures( features )
       del features[:]
-      finished( noTMS )
+      finished()
 
     if not hasSettingPath():
       return
@@ -521,7 +511,7 @@ class CatalogRP(QtCore.QObject):
       self.layer = None
 
   @QtCore.pyqtSlot()
-  def CreateTMS_GDAL_WMS(self):
+  def createTMS_GDAL_WMS(self):
     def setGroupCatalog():
       def existsGroupCatalog():
         groups = [ n for n in root.children() if n.nodeType() == QgsCore.QgsLayerTreeNode.NodeGroup ]
@@ -621,10 +611,74 @@ class CatalogRP(QtCore.QObject):
       'ltgCatalog': self.catalog['ltg'],
       'id_layer': self.layer.id(),
       'ctTMS': ctTMS,
-      'iterFeat': iterFeat, # feat: 'id', 'acquired', 'meta_json'
-      'hasTMS': API_RP.getValue
+      'iterFeat': iterFeat # feat: 'id', 'acquired', 'meta_json'
     }
     self.worker.setting( data )
     self.worker.stepProgress.connect( self.mbcancel.step )
     #self.thread.start() # Start Worker
     self.worker.run()    # DEBUGER
+
+  @QtCore.pyqtSlot()
+  def verifyTMS(self):
+    def finished(totalCommit, totalNoTMS, typeImage):
+      self.msgBar.popWidget()
+      typeMessage = QgsGui.QgsMessageBar.INFO
+      msg = ''
+      if self.mbcancel.isCancel or self.layer is None:
+        msg = "Canceled by User"
+        typeMessage = QgsGui.QgsMessageBar.WARNING
+      elif totalCommit == 0:
+        msg = "All images already were checked ({})".format( typeImage )
+      else:
+        if totalNoTMS > 0:
+          msg = "Checked TMS. Found {} images doesn't have TMS({})".format( totalNoTMS, typeImage )
+          typeMessage = QgsGui.QgsMessageBar.WARNING
+        else:
+          msg = "Checked TMS({})".format( typeImage )
+      self.msgBar.pushMessage( CatalogRP.pluginName, msg, typeMessage, 4 )
+      self.legendCatalogLayer.selectionChanged()
+
+    typeImage = 'selected'
+    getFeatures = self.layer.selectedFeaturesIterator
+    total = self.layer.selectedFeatureCount()
+    if total == 0:
+       getFeatures = self.layer.getFeatures
+       total = self.layer.featureCount()
+       typeImage = 'total'
+       
+    self.msgBar.clearWidgets()
+    msg = "Checking TMS {} images({})...".format( total, typeImage )
+    self.mbcancel = MessageBarCancel( CatalogRP.pluginName, self.msgBar, msg, self.apiServer.kill )
+
+    request = QgsCore.QgsFeatureRequest().setFlags( QgsCore.QgsFeatureRequest.NoGeometry )
+    fields = ['meta_html', 'meta_json', 'meta_jsize']
+    request = request.setSubsetOfAttributes( fields, self.layer.pendingFields() )
+    iter = getFeatures( request )
+    self.layer.startEditing()
+    prov = self.layer.dataProvider()
+    totalNoTMS, totalCommit = 0, 0
+    step = 0
+    for feat in iter:
+      step += 1
+      if self.mbcancel.isCancel or self.layer is None :
+        break
+      msg = "Checking TMS {}/{} images({}).".format( step, total, typeImage )
+      self.mbcancel.message( msg )
+      meta_json = json.loads( feat['meta_json'] )
+      if meta_json['TMS']['hasChecking']:
+        continue
+      totalCommit += 1
+      meta_json['TMS']['hasChecking'] = True
+      r = self.apiServer.existImage( meta_json,  self.settings['rgb'] )
+      meta_json['TMS']['isOk'] = r['isOk']
+      if not r['isOk']:
+         meta_json['TMS']['message'] = r['message']
+         totalNoTMS += 1
+      meta_html  = API_RP.getHtmlTreeMetadata( meta_json, '')
+      meta_json  = json.dumps(  meta_json )
+      meta_jsize = len( meta_json )
+      attrs = { 3 : meta_html, 4 : meta_json, 5: meta_jsize }
+      prov.changeAttributeValues( { feat.id() : attrs } )
+    self.layer.commitChanges()
+    finished(totalCommit, totalNoTMS, typeImage)
+    

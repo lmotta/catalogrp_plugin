@@ -320,15 +320,16 @@ class DialogCatalogSetting(QtGui.QDialog):
     date1.dateChanged.connect( self.onDateChanged1 )
 
 class LegendCatalogLayer():
-  def __init__(self, labelMenu, slotTMS, hasTMS=None):
-    self.labelMenu, self.slotTMS, self.hasTMS = labelMenu, slotTMS, hasTMS
-    self.labelTMS = 'Create TMS'
+  def __init__(self, labelMenu, slotTMS, slotVerifyTMS):
+    self.slots = { 'create_tms': slotTMS, 'verify_tms': slotVerifyTMS } 
+    self.labelMenu, self.slotTMS, self.slotVerifyTMS = labelMenu, slotTMS, slotVerifyTMS
     self.legendInterface = QgsUtils.iface.legendInterface()
-    self.layer, self.actionTMS = None, None
+    self.layer, self.legendLayer = None, None
 
-  def _getLabelTMS(self):
+  def _getLabelsTMS(self, prefixLabelCreate, prefixLabelVerify):
     def getNoTMS(getFeatures):
       request = QgsCore.QgsFeatureRequest().setFlags( QgsCore.QgsFeatureRequest.NoGeometry )
+      request.setSubsetOfAttributes( ['meta_html'], self.layer.pendingFields() )
       iter = getFeatures( request )
       noTMS = 0
       for feat in iter:
@@ -339,42 +340,63 @@ class LegendCatalogLayer():
 
     totaSelected = self.layer.selectedFeatureCount()
     totalAll = self.layer.featureCount()
-    prefix = "{} total".format( totalAll)
+    suffixCreate = "{} total".format( totalAll )
+    suffixVerify = "{} total".format( totalAll )
+    c = "{} total".format( totalAll )
     if totaSelected > 0:
       noTMS = getNoTMS( self.layer.selectedFeaturesIterator )
       if noTMS > 0:
-        prefix = "{}/{} selected - {} without TMS".format( totaSelected, totalAll, noTMS )
+        suffixCreate = "{}/{} selected - {} without TMS".format( totaSelected, totalAll, noTMS )
       else:
-        prefix = "{}/{} selected".format( totaSelected, totalAll )
+        suffixCreate = "{}/{} selected".format( totaSelected, totalAll )
+      suffixVerify = "{}/{} selected".format( totaSelected, totalAll )
     else:
       noTMS = getNoTMS( self.layer.getFeatures )
       if noTMS > 0:
-        prefix = "{} total - {} without TMS".format( totalAll,  noTMS )
+        suffixCreate = "{} total - {} without TMS".format( totalAll,  noTMS )
 
-    return u"{} ({})".format( self.labelTMS, prefix )
+    labelCreate = '{} ({})'.format( prefixLabelCreate, suffixCreate )
+    labelVerify = '{} ({})'.format( prefixLabelVerify, suffixVerify )
+    return labelCreate, labelVerify
 
   def clean(self):
-    self.legendInterface.removeLegendLayerAction( self.actionTMS )
+    for item in self.legendLayer:
+      self.legendInterface.removeLegendLayerAction( item['action'] )
 
-  def setLayer(self, layer, errorTMS=None):
+  def setLayer(self, layer):
     def addActionLegendLayer():
-      lblAction = self._getLabelTMS() 
-      action = QtGui.QAction( lblAction, self.legendInterface )
-      action.triggered.connect( self.slotTMS )
-      arg = ( action, self.labelMenu, 'idTMS', QgsCore.QgsMapLayer.VectorLayer, False )
-      self.legendInterface.addLegendLayerAction( *arg )
-      self.legendInterface.addLegendLayerActionForLayer( action, self.layer )
-      self.actionTMS = action
+      labelCreate, labelVerify = self._getLabelsTMS('Create TMS', 'Verify TMS')
+      self.legendLayer = [
+        {
+          'menu': labelCreate,
+          'id': 'idCreateTMS',
+          'slot': self.slots['create_tms'],
+          'action': None
+        },
+        {
+          'menu': labelVerify,
+          'id': 'idVerifyTMS',
+          'slot': self.slots['verify_tms'],
+          'action': None
+        }
+      ]
+      for item in self.legendLayer:
+        item['action'] = QtGui.QAction( item['menu'], self.legendInterface )
+        item['action'].triggered.connect( item['slot'] )                        
+        arg = ( item['action'], self.labelMenu, item['id'], QgsCore.QgsMapLayer.VectorLayer, False )
+        self.legendInterface.addLegendLayerAction( *arg )
+        self.legendInterface.addLegendLayerActionForLayer( item['action'], self.layer )
 
     self.layer = layer
     self.layer.selectionChanged.connect( self.selectionChanged )
     addActionLegendLayer()
 
   def enabledProcessing(self, enabled=True):
-    self.actionTMS.setEnabled( enabled )
+    for item in self.legendLayer:
+      item['action'].setEnabled( enabled )
 
   @QtCore.pyqtSlot()
   def selectionChanged(self):
-      lblAction = self._getLabelTMS()
-      self.actionTMS.setText( lblAction )
-
+      labelCreate, labelVerify = self._getLabelsTMS('Create TMS', 'Verify TMS')
+      self.legendLayer[0]['action'].setText(labelCreate )
+      self.legendLayer[1]['action'].setText(labelVerify )

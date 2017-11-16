@@ -18,7 +18,7 @@ email                : motta.luiz@gmail.com
  *                                                                         *
  ***************************************************************************/
 """
-import os
+import os, json
 
 from PyQt4 import QtCore
 
@@ -46,9 +46,7 @@ class WorkerCreateTMS_GDAL_WMS(QtCore.QObject):
    key = 'rgb' # [ 'r', 'g', 'b' ]
    self.rgb  = None if not data.has_key( key ) else data[ key ]
    key = 'hasTMS'
-   self.hasTMS  = None if not data.has_key( key ) else data[ key ]
    self.getURL = data['getURL']     # ( feat, self.rgb )
-   
 
   @QtCore.pyqtSlot()
   def run(self):
@@ -151,10 +149,9 @@ class WorkerCreateTMS_GDAL_WMS(QtCore.QObject):
       if self.isKilled:
         self.iterFeat.close()
         break
-      if not self.hasTMS is None:
-        ( isOk, hasTMS) = self.hasTMS( feat['meta_json'], ['TMS', 'isOk'] )
-        if not hasTMS:
-          continue
+      meta_json = json.loads( feat['meta_json'] )
+      if not meta_json['TMS']['isOk']:
+        continue
       image = os.path.join( self.path, formatImage.format( feat['id'] ) )
       if not QtCore.QFile.exists( image ):
         saveTMS( feat, image )
