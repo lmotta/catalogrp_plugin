@@ -277,7 +277,7 @@ class API_Catalog(QtCore.QObject):
     def finished( response):
       self.access.finished.disconnect( finished )
       if response[ 'isOk' ]:
-        isJson = response['statusRequest']['contentTypeHeader'] == 'application/json'
+        isJson = response['statusRequest']['contentTypeHeader'].find('application/json') > -1
         response['isJSON'] = isJson
         if isJson:
           data = json.loads( str( response['data'] ) )

@@ -138,6 +138,8 @@ class CatalogRP(CatalogImage):
     self.catalogName = "Remote Pixel"
     self.nameThread = "QGIS_Plugin_Catalog_RP"
     self.apiServer = API_RP()
+    self.pairkeys = { 'id': 'scene_id', 'acquired': 'date', 'thumbnail': 'thumbnail' }
+    self.geomKey = 'data_geometry'
     self.settings = DialogCatalogSettingRP.getSettings( DialogCatalogSettingRP.configQGIS )
     self.settings['satellite'] = 'landsat-8'
     self.settings['rgb'] = DialogCatalogSettingRP.getVegetationBands( self.settings['satellite'] )

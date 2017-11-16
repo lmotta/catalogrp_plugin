@@ -39,9 +39,11 @@ class CatalogImage(QtCore.QObject):
     # Set by derivade Class
     self.styleFile = None
     self.catalogName = None
-    self.apiServer = None
-    self.settings = None
     self.nameThread = None
+    self.apiServer = None
+    self.pairkeys = None
+    self.geomKey = None
+    self.settings = None
     #
     self.canvas = QgsUtils.iface.mapCanvas()
     self.msgBar = QgsUtils.iface.messageBar()
@@ -244,13 +246,12 @@ class CatalogImage(QtCore.QObject):
         # Fields
         # 'id', 'acquired', 'thumbnail', 'meta_html', 'meta_json', 'meta_jsize'
         vFields =  { }
-        pairkeys = { 'id': 'scene_id', 'acquired': 'date', 'thumbnail': 'thumbnail' }
-        for k, v in pairkeys.items():
+        for k, v in self.pairkeys.items():
           vFields[ k ] = itemResponse[ v ]
         del itemResponse['thumbnail']
         # Geom
         geom = None
-        geomItem = itemResponse['data_geometry']
+        geomItem = itemResponse[ self.geomKey ]
         geomCoords = geomItem['coordinates']
         if geomItem['type'] == 'Polygon':
           qpolygon = map ( lambda polyline: map( lambda item: QgsCore.QgsPoint( item[0], item[1] ), polyline ), geomCoords )
@@ -261,7 +262,7 @@ class CatalogImage(QtCore.QObject):
               qpolygon = map ( lambda polyline: map( lambda item: QgsCore.QgsPoint( item[0], item[1] ), polyline ), polygon )
               qmultipolygon.append( qpolygon )
           geom = QgsCore.QgsGeometry.fromMultiPolygon( qmultipolygon )
-        del itemResponse['data_geometry']
+        del itemResponse[ self.geomKey ]
         #
         itemResponse['TMS'] = {
           'isOk': True,
