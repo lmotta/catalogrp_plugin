@@ -272,7 +272,7 @@ class API_Catalog(QtCore.QObject):
     self.access.finished.connect( finished )
     self.access.run( self.currentUrl, self.credential )
 
-  def requestForJson(self, url, setFinished):
+  def requestForJson(self, url, setFinished, json_request=None):
     @QtCore.pyqtSlot(dict)
     def finished( response):
       self.access.finished.disconnect( finished )
@@ -290,7 +290,7 @@ class API_Catalog(QtCore.QObject):
       setFinished( response )
 
     self.access.finished.connect( finished )
-    self.access.run( QtCore.QUrl( url ), self.credential )
+    self.access.run( QtCore.QUrl( url ), self.credential, json_request=json_request )
 
   @staticmethod
   def getValue(jsonMetadataFeature, keys):

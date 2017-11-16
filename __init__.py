@@ -30,24 +30,20 @@ def classFactory(iface):
     return CatalogRPPlugin( iface )
 
 class CatalogRPPlugin:
-
-    icon = QtGui.QIcon( os.path.join( os.path.dirname(__file__), 'catalogrp.svg' ) )
-    pluginName = "Catalog RP"
-
     def __init__(self, iface):
-    
         self.iface = iface
         self.name = u"&Catalog Remote Pixel"
+        self.pluginName = "Catalog Remote Pixel"
+        self.icon = QtGui.QIcon( os.path.join( os.path.dirname(__file__), 'catalogrp.svg' ) )
         self.msgBar = iface.messageBar()
-        self.ctl = CatalogRP( CatalogRPPlugin.icon )
-
+        self.ctl = CatalogRP( self.icon )
         API_Catalog.copyExpression()
     
     def initGui(self):
         dataActions = [
             {
-                'name': 'Catalog RP',
-                'icon': QtGui.QIcon( CatalogRPPlugin.icon ),
+                'name': 'Catalog Remote Pixel',
+                'icon': QtGui.QIcon( self.icon ),
                 'method': self.run
             },
             {
@@ -85,7 +81,7 @@ class CatalogRPPlugin:
     def run(self):
         if self.iface.mapCanvas().layerCount() == 0:
           msg = "Need layer(s) in map"
-          self.iface.messageBar().pushMessage( CatalogRPPlugin.pluginName, msg, QgsGui.QgsMessageBar.WARNING, 2 )
+          self.iface.messageBar().pushMessage( self.pluginName, msg, QgsGui.QgsMessageBar.WARNING, 2 )
           return
 
         if not self.ctl.isHostLive:
