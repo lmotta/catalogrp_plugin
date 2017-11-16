@@ -149,6 +149,12 @@ class CatalogImage(QtCore.QObject):
     self.msgBar.clearWidgets()
     self.msgBar.pushMessage( self.pluginName, msg, typMessage, 4 )
 
+  def _setImageUrl(self, meta_json):
+    """
+    Use for add 'image_url' in 'TMS' for some Catalogs
+    """
+    return
+    
   def hostLive(self):
     def setFinished(response):
       self.isOkProcess = response[ 'isHostLive' ]
@@ -269,6 +275,8 @@ class CatalogImage(QtCore.QObject):
           'hasChecking': False,
           'minimum_tile': getMinTileXYZ( geom, 8 )
         }
+        self._setImageUrl( itemResponse ) # Add inside TMS
+        #
         vFields[ fields[3] ] = API_Catalog.getHtmlTreeMetadata( itemResponse, '')
         vjson = json.dumps(  itemResponse )
         vFields[ fields[4] ] = vjson
