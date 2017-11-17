@@ -23,9 +23,9 @@ import os, json, math
 
 from PyQt4 import QtCore, QtGui
 
-from apiqtcatalog import API_Catalog
-from catalogimage import CatalogImage
-from legendlayercatalog import DialogCatalogSetting
+from utils_catalog.apiqtcatalog import API_Catalog
+from utils_catalog.catalogimage import CatalogImage
+from utils_catalog.legendlayercatalog import DialogCatalogSetting
 
 
 class API_RP(API_Catalog):
@@ -134,7 +134,6 @@ class DialogCatalogSettingRP(DialogCatalogSetting):
 class CatalogRP(CatalogImage):
   def __init__(self, icon):
     super(CatalogRP, self).__init__( icon, u'Catalog Remote Pixel')
-    self.styleFile = 'rp_scenes.qml'
     self.catalogName = "Remote Pixel"
     self.nameThread = "QGIS_Plugin_Catalog_RP"
     self.apiServer = API_RP()

@@ -19,7 +19,7 @@ email                : motta.luiz@gmail.com
 """
 
 from qgis.core import ( qgsfunction )
-from catalogrp_plugin import API_Catalog 
+from apicatalog import API_Catalog 
 
 @qgsfunction(args=1, group='Catalog TMS')
 def getValueFromMetadata(values, feature, parent):

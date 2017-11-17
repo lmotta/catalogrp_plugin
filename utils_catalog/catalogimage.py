@@ -35,9 +35,9 @@ class CatalogImage(QtCore.QObject):
   enableRun = QtCore.pyqtSignal( bool )
   def __init__(self, icon, pluginName):
     super(CatalogImage, self).__init__()
+    self.icon = icon
     self.pluginName = pluginName
     # Set by derivade Class
-    self.styleFile = None
     self.catalogName = None
     self.nameThread = None
     self.apiServer = None
@@ -45,10 +45,10 @@ class CatalogImage(QtCore.QObject):
     self.geomKey = None
     self.settings = None
     #
+    self.styleFile = styleFile = os.path.join( os.path.dirname(__file__), 'scenes.qml' )
     self.canvas = QgsUtils.iface.mapCanvas()
     self.msgBar = QgsUtils.iface.messageBar()
     self.logMessage = QgsCore.QgsMessageLog.instance().logMessage
-    self.icon = icon
     self.mainWindow = QgsUtils.iface.mainWindow()
 
     self.legendRasterGeom = LegendRasterGeom( self.pluginName )
