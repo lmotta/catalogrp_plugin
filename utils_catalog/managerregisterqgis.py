@@ -150,11 +150,3 @@ class ManagerRegisterQGis(QtCore.QObject):
     s = QtCore.QSettings()
     for v in localSettingKeys.values():
       s.remove( v )
-
-"""
-API_RP.setKey(urlKeys, setFinished)
-urlKeys = { 
-  'landsat-8': 'mn2iekg7k7',
-  'sentinel-2': 'jmcka7torb'
-}
-"""

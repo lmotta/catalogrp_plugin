@@ -43,11 +43,9 @@ class API_RP(API_Catalog):
       'intersects={geom}'
     ]
     self.urlSearch = '&'.join( l_url )
-    # landsat-8': mn2iekg7k7
-    # 'sentinel-2':jmcka7torb
     self.urlImages = {
-        'landsat-8': "https://{landsat-8}.execute-api.us-west-2.amazonaws.com/production/landsat",
-        'sentinel-2': "https://{sentinel-2}.execute-api.eu-central-1.amazonaws.com/production/sentinel"
+        'landsat-8': "https://{}.execute-api.us-west-2.amazonaws.com/production/landsat",
+        'sentinel-2': "https://{}.execute-api.eu-central-1.amazonaws.com/production/sentinel"
     }
     self.isOkUrl = False
     API_Catalog.__init__(self)
@@ -151,7 +149,7 @@ class API_RP(API_Catalog):
     zxy = "{z}/{x}/{y}".format( z=tile['z'], x=tile['x'], y=tile['y'] )
     url = "{url}/tiles/{{product_id}}/{{zxy}}.png?rgb={{rgb}}&tile=256&pan=true".format( url=self.urlImages[ satellite ] )
     url = url.format( product_id=id, zxy=zxy,rgb=rgb)
-    super( API_RP, self ).requestForJson( url, setFinished)
+    API_Catalog.requestForJson(self, url, setFinished)
     loop.exec_()
     return  self.response
 
@@ -187,7 +185,7 @@ class DialogCatalogSettingRP(DialogCatalogSetting):
 class CatalogRP(CatalogImage):
   def __init__(self, parent, icon):
     self.parent, self.icon = parent, icon
-    CatalogImage.__init__(self, icon, u'Catalog Remote Pixel')
+    CatalogImage.__init__(self, u'Catalog Remote Pixel')
     self.catalogName = "Remote Pixel"
     self.nameThread = "QGIS_Plugin_Catalog_RP"
     self.apiServer = API_RP()
@@ -220,6 +218,6 @@ class CatalogRP(CatalogImage):
 
   def settingImages(self):
     CatalogImage.settingImages(self)
-    dlg = DialogCatalogSettingTest( self.mainWindow, self.icon, self.settings )
+    dlg = DialogCatalogSettingRP( self.mainWindow, self.icon, self.settings )
     if dlg.exec_() == QtGui.QDialog.Accepted:
       self.settings = dlg.getData()
