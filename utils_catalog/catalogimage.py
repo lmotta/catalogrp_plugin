@@ -155,25 +155,40 @@ class CatalogImage(QtCore.QObject):
     """
     return
     
-  def hostLive(self):
+  def _hostLiveOkRegister(self):
     def setFinished(response):
       self.isOkProcess = response[ 'isOk' ]
       if not self.isOkProcess:
         self.messageProcess = response[ 'message' ]
-      #loop.quit()
 
-    #loop = QtCore.QEventLoop()
     msg = "Checking server..."
     self.msgBar.pushMessage( self.pluginName, msg, QgsGui.QgsMessageBar.INFO )
     self.enableRun.emit( False )
     self.apiServer.isHostLive( setFinished )
-    #loop.exec_()
     self.msgBar.popWidget()
     if not self.isOkProcess:
       self.msgBar.pushMessage( self.pluginName, self.messageProcess, QgsGui.QgsMessageBar.CRITICAL, 4 )
       self.messageProcess = None
     self.isHostLive = self.isOkProcess
     self.enableRun.emit( True )
+
+  def _hostLive(self):
+    def finished(response):
+      self.mngRegisterQGis.isOkRegister = response['isOk']
+      if not response['isOk']:
+        arg = ( self.pluginName, response['message'], QgsGui.QgsMessageBar.CRITICAL, 4 ) 
+        self.msgBar.pushMessage( *arg )
+
+    registers = self.mngRegisterQGis.get()
+    if not registers.values()[0] is None :
+      self.apiServer.setKeys( registers, finished )
+    else:
+      self.mngRegisterQGis.dialogRegister( self.parent, self.icon )
+    if self.mngRegisterQGis.isOkRegister:
+      self.isHostLive = True
+
+  def hostLive(self):
+    self._hostLiveOkRegister() if self.mngRegisterQGis.isOkRegister else self._hostLive()
 
   def createLayerScenes(self):
     def hasSettingPath():
@@ -439,11 +454,13 @@ class CatalogImage(QtCore.QObject):
   def clipboardRegister(self):
     cb = QtGui.QApplication.clipboard()
     registers = self.mngRegisterQGis.get()
-    keys = sorted( registers.keys() )
     keys_values = []
-    for k in keys:
+    for k in sorted( registers.keys() ):
       keys_values.append( "{}: {}".format( k, registers[ k ] ) )
     cb.setText( '\n'.join( keys_values ), mode=cb.Clipboard )    
+    arg = ( self.pluginName, 'Copy register(s) to Clipboard', QgsGui.QgsMessageBar.INFO, 4 )
+    self.msgBar.pushMessage( *arg )
+
 
   @QtCore.pyqtSlot(str)
   def layerWillBeRemoved(self, id):
@@ -555,10 +572,12 @@ class CatalogImage(QtCore.QObject):
       'ctTMS': ctTMS,
       'iterFeat': iterFeat # feat: 'id', 'acquired', 'meta_json'
     }
+    if not self.apiServer.credential is None:
+       data['user_pwd'] = self.apiServer.credential
     self.worker.setting( data )
     self.worker.stepProgress.connect( self.mbcancel.step )
-    #self.thread.start() # Start Worker
-    self.worker.run()    # DEBUGER
+    self.thread.start() # Start Worker
+    #self.worker.run()    # DEBUGER
 
   @QtCore.pyqtSlot()
   def verifyTMS(self):

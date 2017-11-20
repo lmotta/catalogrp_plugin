@@ -244,6 +244,9 @@ class API_Catalog(QtCore.QObject):
       del response[ 'data' ]
     del response[ 'statusRequest' ]
 
+  def _getUrlImage(self, meta_json, sbands ):
+    pass # Define by Derivated Class
+
   def kill(self):
     self.access.kill()
 
@@ -286,6 +289,35 @@ class API_Catalog(QtCore.QObject):
 
     self.access.finished.connect( finished )
     self.access.run( QtCore.QUrl( url ), self.credential, json_request=json_request )
+
+  def existImage(self, meta_json,  sbands):
+    def setFinished(response):
+      if not response['isOk']:
+        msg = response['message']
+        if not self.isKilled():
+          substring = "server replied:"
+          msg = msg[ msg.index( substring ) + len( substring ) + 1 : ]
+          response['message'] = msg
+        del response['errorCode']
+        self.response = response
+      elif response['isJSON']:
+        response['isOk'] = False
+        self.response = response
+      else:
+        self.response = { 'isOk': True }
+      loop.quit()
+
+    self.response = None
+    tile = meta_json['TMS']['minimum_tile']
+    url = self._getUrlImage( meta_json, sbands ).format( z=tile['z'], x=tile['x'], y=tile['y'] )
+    loop = QtCore.QEventLoop()
+    self.requestForJson( url, setFinished )
+    loop.exec_()
+    return  self.response
+
+  def getURL_TMS(self, feat, sbands):
+    meta_json = json.loads( feat['meta_json'] )
+    return self._getUrlImage( meta_json, sbands )
 
   @staticmethod
   def getValue(jsonMetadataFeature, keys):

@@ -114,7 +114,7 @@ class WorkerCreateTMS_GDAL_WMS(QtCore.QObject):
           "</GDAL_WMS>"
         ]
         if not self.user_pwd is None:
-          arg = ( self.user_pwd['user'], self.user_pwd['pwd'] )
+          arg = ( self.user_pwd['user'], self.user_pwd['password'] )
           user_pwd = "  <UserPwd>{}:{}</UserPwd>".format( *arg )
           l.insert( len(l)-1, user_pwd )
         return '\n'.join( l )

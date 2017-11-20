@@ -53,15 +53,15 @@ class CatalogPlugin(object):
             { 'isSepatator': True },             
             {
               'isSepatator': False,
-              'name': 'Clear register',
-              'icon': QgsCore.QgsApplication.getThemeIcon('/mActionOptions.svg'),
-              'method': self.clearRegister
-            },
-            {
-              'isSepatator': False,
               'name': 'Copy register to Clipboard',
               'icon': QgsCore.QgsApplication.getThemeIcon('/mActionOptions.svg'),
               'method': self.clipboardRegister
+            },
+            {
+              'isSepatator': False,
+              'name': 'Clear register',
+              'icon': QgsCore.QgsApplication.getThemeIcon('/mActionOptions.svg'),
+              'method': self.clearRegister
             }
         ]
         mw = self.iface.mainWindow()

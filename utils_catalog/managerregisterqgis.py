@@ -28,11 +28,15 @@ class DialogRegister(QtGui.QDialog):
     def initGui():
       def getLineEditKeys():
         editKeys = {}
-        for k in sorted( apiServer.keysSetting.keys() ):
+        keys = sorted( [ ( v['order'],k ) for k,v in apiServer.keysSetting.iteritems() ] )
+        keys = [ v[1] for v in keys ]
+        for k in keys:
           v = apiServer.keysSetting[ k ]
           l = QtGui.QHBoxLayout( self )
           label = QtGui.QLabel( "{}:".format( v['label'] ), self )
           l.addWidget( label )
+          spacer = QtGui.QSpacerItem(20, 40, QtGui.QSizePolicy.Expanding, QtGui.QSizePolicy.Minimum)
+          l.addItem( spacer )
           editKeys[ k ] = QtGui.QLineEdit( self )
           if v['isPassword']:
             editKeys[ k ].setEchoMode( QtGui.QLineEdit.Password )
@@ -101,9 +105,9 @@ class DialogRegister(QtGui.QDialog):
 
 class ManagerRegisterQGis(QtCore.QObject):
   
-  def __init__(self, localSetting, apiServer):
+  def __init__(self, localSetting, titleDialog, apiServer):
     super(ManagerRegisterQGis, self).__init__()
-    self.apiServer = apiServer
+    self.titleDialog, self.apiServer = titleDialog, apiServer
     self.localSetting = localSetting # ~/.config/QGIS/QGIS2.conf
     self.isOkRegister = False
 
@@ -113,11 +117,11 @@ class ManagerRegisterQGis(QtCore.QObject):
       localSettingKeys[ k ] = "{}/{}".format( self.localSetting, k )
     return localSettingKeys
 
-  def dialogRegister(self, title, parent, icon):
+  def dialogRegister(self, parent, icon):
 
     def saveKeyDlg():
       msg = "Do you like save register(QGIS setting)?"
-      reply = QtGui.QMessageBox.question( dlg, title, msg, QtGui.QMessageBox.Yes | QtGui.QMessageBox.No) 
+      reply = QtGui.QMessageBox.question( dlg, self.titleDialog, msg, QtGui.QMessageBox.Yes | QtGui.QMessageBox.No) 
       if reply == QtGui.QMessageBox.Yes:
         localSettingKeys = self._getLocalSettingKeys()
         urlKeys = dlg.getUrlKeys()
@@ -133,7 +137,7 @@ class ManagerRegisterQGis(QtCore.QObject):
         saveKeyDlg()
 
     self.isOkRegister = False
-    dlg = DialogRegister( parent, title, icon, self.apiServer )
+    dlg = DialogRegister( parent, self.titleDialog, icon, self.apiServer )
     dlg.finished.connect( finished )
     dlg.exec_()
     
