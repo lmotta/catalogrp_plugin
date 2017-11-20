@@ -26,11 +26,16 @@ from PyQt4 import QtCore, QtGui
 from utils_catalog.apiqtcatalog import API_Catalog
 from utils_catalog.catalogimage import CatalogImage
 from utils_catalog.legendlayercatalog import DialogCatalogSetting
+from utils_catalog.managerregisterqgis import ManagerRegisterQGis
 
 
 class API_RP(API_Catalog):
   def __init__(self):
     self.satellites = ['landsat-8', 'sentinel-2']    
+    self.keysSetting = { # ManagerRegisterQGis
+      'landsat-8':  { 'label': 'Enter for Landsat 8', 'isPassword': True },
+      'sentinel-2': { 'label': 'Enter for Sentinel 2', 'isPassword': True },
+    }
     l_url = [
       'https://api.developmentseed.org/satellites/?limit=2000',
       'satellite_name={satellite}',
@@ -38,12 +43,14 @@ class API_RP(API_Catalog):
       'intersects={geom}'
     ]
     self.urlSearch = '&'.join( l_url )
+    # landsat-8': mn2iekg7k7
+    # 'sentinel-2':jmcka7torb
     self.urlImages = {
-        'landsat-8': "https://mn2iekg7k7.execute-api.us-west-2.amazonaws.com/production/landsat",
-        'sentinel-2': "https://jmcka7torb.execute-api.eu-central-1.amazonaws.com/production/sentinel"
+        'landsat-8': "https://{landsat-8}.execute-api.us-west-2.amazonaws.com/production/landsat",
+        'sentinel-2': "https://{sentinel-2}.execute-api.eu-central-1.amazonaws.com/production/sentinel"
     }
-    #
-    super( API_RP, self ).__init__()
+    self.isOkUrl = False
+    API_Catalog.__init__(self)
 
   def _getSatelliteProductId(self, meta_json, sbands ):
     satellite = meta_json['satellite_name']
@@ -54,9 +61,55 @@ class API_RP(API_Catalog):
       id = meta_json['product_id']
     return ( satellite, id, ','.join( sbands).replace('B', '') )
 
+  def _checkUrls(self, titleInvalid, urlKeys=None):
+    def checkUrl(url):
+      def setFinished(response):
+        self.isOkUrl = response['isOk']
+        loop.quit()
+  
+      loop = QtCore.QEventLoop()
+      self.currentUrl = QtCore.QUrl( url )
+      API_Catalog.isHostLive(self, setFinished )
+      loop.exec_()
+
+    totalOk = 0
+    urlcheck = { }
+    for satellite in self.urlImages.keys():
+      urlcheck[ satellite ] = {}
+      if urlKeys is None:
+        url = self.urlImages[ satellite ]
+      else:
+        url = self.urlImages[ satellite ].format( urlKeys[ satellite ] ) 
+      checkUrl( url )
+      if self.isOkUrl:
+        urlcheck[ satellite ]['isOk'] = True
+        urlcheck[ satellite ]['url']  = url
+        totalOk += 1 
+      else:
+        urlcheck[ satellite ]['isOk'] = False
+    #
+    response = {}
+    if totalOk == len( self.urlImages.keys() ):
+      response['isOk'] = True
+    else:
+      response['isOk'] = False
+      errors = []
+      for satellite in self.urlImages.keys():
+        if not urlcheck[ satellite ]['isOk']:
+          errors.append( satellite )
+      response['message'] = "{}: {}".format( titleInvalid, ','.join( errors ) )
+    return urlcheck, response
+
+  def setKeys(self, urlKeys, setFinished):
+    urlcheck, response = self._checkUrls('Invalid key(s)', urlKeys )
+    if response['isOk']:
+      for satellite in urlKeys.keys():
+        self.urlImages[ satellite ] = urlcheck[ satellite ]['url']
+    setFinished( response )
+
   def isHostLive(self, setFinished):
-    self.currentUrl = QtCore.QUrl( self.urlImages['landsat-8'] )
-    super( API_RP, self ).isHostLive( setFinished )
+    urlcheck, response = self._checkUrls ('Host(s) not live')
+    setFinished( response )
 
   def getScenes(self, satellite, jsonGeom, date_from, date_to, setFinished):
     """
@@ -121,7 +174,7 @@ class DialogCatalogSettingRP(DialogCatalogSetting):
     }
     #
     arg = ( parent, icon, dataSetting, satellites, DialogCatalogSettingRP.configQGIS, DialogCatalogSettingRP.getVegetationBands )
-    super( DialogCatalogSettingRP, self ).__init__( *arg )
+    DialogCatalogSetting.__init__(self,  *arg )
 
   @staticmethod
   def getVegetationBands(satellite):
@@ -132,8 +185,9 @@ class DialogCatalogSettingRP(DialogCatalogSetting):
     
 
 class CatalogRP(CatalogImage):
-  def __init__(self, icon):
-    super(CatalogRP, self).__init__( icon, u'Catalog Remote Pixel')
+  def __init__(self, parent, icon):
+    self.parent, self.icon = parent, icon
+    CatalogImage.__init__(self, icon, u'Catalog Remote Pixel')
     self.catalogName = "Remote Pixel"
     self.nameThread = "QGIS_Plugin_Catalog_RP"
     self.apiServer = API_RP()
@@ -142,9 +196,30 @@ class CatalogRP(CatalogImage):
     self.settings = DialogCatalogSettingRP.getSettings( DialogCatalogSettingRP.configQGIS )
     self.settings['satellite'] = 'landsat-8'
     self.settings['rgb'] = DialogCatalogSettingRP.getVegetationBands( self.settings['satellite'] )
+    arg = ( DialogCatalogSettingRP.configQGIS, self.apiServer )
+    self.mngRegisterQGis = ManagerRegisterQGis( *arg )
+
+  def hostLive(self):
+    def finished(response):
+      self.mngRegisterQGis.isOkRegister = response['isOk']
+      if not response['isOk']:
+        arg = ( self.pluginName, response['message'], QgsGui.QgsMessageBar.CRITICAL, 4 ) 
+        self.msgBar.pushMessage( *arg )
+
+    if self.mngRegisterQGis.isOkRegister:
+      CatalogImage.hostLive(self)
+    else:
+      registers = self.mngRegisterQGis.get()
+      if not registers.values()[0] is None :
+        self.apiServer.setKeys( registers, finished )
+      else:
+        title = "API Keys {}".format( self.pluginName )
+        self.mngRegisterQGis.dialogRegister( title, self.parent, self.icon )
+      if self.mngRegisterQGis.isOkRegister:
+        self.isHostLive = True
 
   def settingImages(self):
-    super(CatalogRP, self).settingImages()
-    dlg = DialogCatalogSettingRP( self.mainWindow, self.icon, self.settings )
+    CatalogImage.settingImages(self)
+    dlg = DialogCatalogSettingTest( self.mainWindow, self.icon, self.settings )
     if dlg.exec_() == QtGui.QDialog.Accepted:
       self.settings = dlg.getData()

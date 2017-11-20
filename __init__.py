@@ -31,6 +31,6 @@ def classFactory(iface):
 class CatalogRPPlugin(CatalogPlugin):
     def __init__(self, iface):
         arg = ( iface, u"&Catalog Remote Pixel", 'Catalog Remote Pixel' )
-        super( CatalogRPPlugin, self ).__init__( *arg )
+        CatalogPlugin.__init__(self, *arg )
         self.icon = QtGui.QIcon( os.path.join( os.path.dirname(__file__), 'catalogrp.svg' ) )
-        self.ctl = CatalogRP( self.icon )
+        self.ctl = CatalogRP( iface.mainWindow(), self.icon )

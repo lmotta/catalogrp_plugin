@@ -250,22 +250,17 @@ class API_Catalog(QtCore.QObject):
   def isKilled(self):
     return self.access.isKilled
 
-  def isRunning(self):
-    return self.access.isRunning()
-
   def isHostLive(self, setFinished):
     @QtCore.pyqtSlot(dict)
     def finished( response):
       self.access.finished.disconnect( finished )
       if response['isOk']:
-        response[ 'isHostLive' ] = True
         self._clearResponse( response )
       else:
-        if response['errorCode'] == QtNetwork.QNetworkReply.HostNotFoundError:
-          response[ 'isHostLive' ] = False
+        if response['errorCode'] > 199: # 2?? is Ok
+          response['isOk'] = True
+        elif response['errorCode'] == QtNetwork.QNetworkReply.HostNotFoundError:
           response[ 'message' ] += "\nURL = %s" % self.currentUrl
-        else:
-          response[ 'isHostLive' ] = True
 
       setFinished( response )
 

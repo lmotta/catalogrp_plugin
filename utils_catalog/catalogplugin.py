@@ -39,24 +39,42 @@ class CatalogPlugin(object):
     def initGui(self):
         dataActions = [
             {
+                'isSepatator': False,
                 'name': self.name,
                 'icon': self.icon,
                 'method': self.run
             },
             {
+                'isSepatator': False,
                 'name': 'Setting...',
                 'icon': QgsCore.QgsApplication.getThemeIcon('/mActionOptions.svg'),
                 'method': self.config
+            },
+            { 'isSepatator': True },             
+            {
+              'isSepatator': False,
+              'name': 'Clear register',
+              'icon': QgsCore.QgsApplication.getThemeIcon('/mActionOptions.svg'),
+              'method': self.clearRegister
+            },
+            {
+              'isSepatator': False,
+              'name': 'Copy register to Clipboard',
+              'icon': QgsCore.QgsApplication.getThemeIcon('/mActionOptions.svg'),
+              'method': self.clipboardRegister
             }
         ]
-        
         mw = self.iface.mainWindow()
         popupMenu = QtGui.QMenu( mw )
         for d in dataActions:
+          if d['isSepatator']:
+            a = QtGui.QAction( mw )
+            a.setSeparator(True)
+          else:
             a = QtGui.QAction( d['icon'], d['name'], mw )
             a.triggered.connect( d['method'] )
-            self.iface.addPluginToRasterMenu( self.name, a )
-            popupMenu.addAction(  a )
+          self.iface.addPluginToRasterMenu( self.name, a )
+          popupMenu.addAction(  a )
         defaultAction = popupMenu.actions()[0]
         self.toolButton = QtGui.QToolButton()
         self.toolButton.setPopupMode( QtGui.QToolButton.MenuButtonPopup )
@@ -91,3 +109,11 @@ class CatalogPlugin(object):
     @QtCore.pyqtSlot()
     def config(self):
         self.ctl.settingImages()
+
+    @QtCore.pyqtSlot()
+    def clearRegister(self):
+      self.ctl.clearRegister()
+  
+    @QtCore.pyqtSlot()
+    def clipboardRegister(self):
+      self.ctl.clipboardRegister()

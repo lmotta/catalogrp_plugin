@@ -33,9 +33,8 @@ from workertms import WorkerCreateTMS_GDAL_WMS
 # Base Class
 class CatalogImage(QtCore.QObject):
   enableRun = QtCore.pyqtSignal( bool )
-  def __init__(self, icon, pluginName):
+  def __init__(self, pluginName):
     super(CatalogImage, self).__init__()
-    self.icon = icon
     self.pluginName = pluginName
     # Set by derivade Class
     self.catalogName = None
@@ -44,6 +43,7 @@ class CatalogImage(QtCore.QObject):
     self.pairkeys = None
     self.geomKey = None
     self.settings = None
+    self.mngRegisterQGis = None
     #
     self.styleFile = styleFile = os.path.join( os.path.dirname(__file__), 'scenes.qml' )
     self.canvas = QgsUtils.iface.mapCanvas()
@@ -157,17 +157,17 @@ class CatalogImage(QtCore.QObject):
     
   def hostLive(self):
     def setFinished(response):
-      self.isOkProcess = response[ 'isHostLive' ]
+      self.isOkProcess = response[ 'isOk' ]
       if not self.isOkProcess:
         self.messageProcess = response[ 'message' ]
-      loop.quit()
+      #loop.quit()
 
-    loop = QtCore.QEventLoop()
+    #loop = QtCore.QEventLoop()
     msg = "Checking server..."
     self.msgBar.pushMessage( self.pluginName, msg, QgsGui.QgsMessageBar.INFO )
     self.enableRun.emit( False )
     self.apiServer.isHostLive( setFinished )
-    loop.exec_()
+    #loop.exec_()
     self.msgBar.popWidget()
     if not self.isOkProcess:
       self.msgBar.pushMessage( self.pluginName, self.messageProcess, QgsGui.QgsMessageBar.CRITICAL, 4 )
@@ -417,12 +417,33 @@ class CatalogImage(QtCore.QObject):
     self.msgBar.pushMessage( self.pluginName, msg, QgsGui.QgsMessageBar.INFO )
     addSizeTMS()
     self.msgBar.popWidget()
-####  Derivated class
-#     super(CatalogRP, self).settingImages()
-#     dlg = DialogCatalogSetting??( self.mainWindow, self.icon, self.settings )
-#     if dlg.exec_() == QtGui.QDialog.Accepted:
-#       self.settings = dlg.getData()
-###
+
+  def clearRegister(self):
+    def dialogQuestion():
+      msg = "Are you sure want clear the register(s)?"
+      msgBox = QtGui.QMessageBox( QtGui.QMessageBox.Question, self.catalogName, msg, QtGui.QMessageBox.Yes | QtGui.QMessageBox.No,  self.mainWindow )
+      msgBox.setDefaultButton( QtGui.QMessageBox.No )
+      return msgBox.exec_()
+
+    msg = "the login register. Next run QGIS will need enter the register."
+    registers =  self.mngRegisterQGis.get()
+    if registers.values()[0] is None:
+      arg = ( self.pluginName, 'Already cleared register(s)', QgsGui.QgsMessageBar.INFO, 4 )
+      self.msgBar.pushMessage( *arg )
+      return
+    if QtGui.QMessageBox.Yes == dialogQuestion():
+      self.mngRegisterQGis.remove()
+      arg = ( self.pluginName, 'Cleared register(s)', QgsGui.QgsMessageBar.INFO, 4 )
+      self.msgBar.pushMessage( *arg )
+
+  def clipboardRegister(self):
+    cb = QtGui.QApplication.clipboard()
+    registers = self.mngRegisterQGis.get()
+    keys = sorted( registers.keys() )
+    keys_values = []
+    for k in keys:
+      keys_values.append( "{}: {}".format( k, registers[ k ] ) )
+    cb.setText( '\n'.join( keys_values ), mode=cb.Clipboard )    
 
   @QtCore.pyqtSlot(str)
   def layerWillBeRemoved(self, id):
@@ -606,4 +627,3 @@ class CatalogImage(QtCore.QObject):
       prov.changeAttributeValues( { feat.id() : attrs } )
     self.layer.commitChanges()
     finished(totalCommit, totalNoTMS, typeImage)
-    
