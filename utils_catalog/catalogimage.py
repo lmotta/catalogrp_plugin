@@ -455,7 +455,9 @@ class CatalogImage(QtCore.QObject):
     cb = QtGui.QApplication.clipboard()
     registers = self.mngRegisterQGis.get()
     keys_values = []
-    for k in sorted( registers.keys() ):
+    keys = sorted( [ ( v['order'],k ) for k,v in self.apiServer.keysSetting.iteritems() ] )
+    keys = [ v[1] for v in keys ]
+    for k in keys:
       keys_values.append( "{}: {}".format( k, registers[ k ] ) )
     cb.setText( '\n'.join( keys_values ), mode=cb.Clipboard )    
     arg = ( self.pluginName, 'Copy register(s) to Clipboard', QgsGui.QgsMessageBar.INFO, 4 )
