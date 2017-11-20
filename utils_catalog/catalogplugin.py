@@ -44,6 +44,7 @@ class CatalogPlugin(object):
                 'icon': self.icon,
                 'method': self.run
             },
+            { 'isSepatator': True },
             {
                 'isSepatator': False,
                 'name': 'Setting...',
