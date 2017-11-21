@@ -9,6 +9,9 @@ See presentation: It will be done...
 Tested with QGIS 2.18.13
 Icon By www.flaticon.com
 Search images from api.developmentseed.org
+
+Use https://github.com/lmotta/utils_catalog
+
 ## Author
 Luiz Motta
 

@@ -22,8 +22,14 @@ email                : motta.luiz@gmail.com
 import os
 from PyQt4 import QtGui
 
-from catalogrp import CatalogRP
+# DEVELOP
+import sys # DEVELOP
+path_utils = '/home/lmotta/.qgis2/python/plugins/library_utils' # DEVELOP
+sys.path.append( path_utils ) # DEVELOP
+# DEVELOP
 from utils_catalog.catalogplugin import CatalogPlugin
+from catalogrp import CatalogRP
+
 
 def classFactory(iface):
     return CatalogRPPlugin( iface )

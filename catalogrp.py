@@ -31,10 +31,10 @@ from utils_catalog.managerregisterqgis import ManagerRegisterQGis
 
 class API_RP(API_Catalog):
   def __init__(self):
-    self.satellites = ['landsat-8', 'sentinel-2']    
-    self.keysSetting = { # ManagerRegisterQGis
+    self.satellites = ['landsat-8', 'sentinel-2']
+    keysSetting = { # ManagerRegisterQGis
       'landsat-8':  { 'order': 1, 'label': 'Landsat 8', 'isPassword': True },
-      'sentinel-2': { 'order': 2, 'label': 'Sentinel 2', 'isPassword': True },
+      'sentinel-2': { 'order': 2, 'label': 'Sentinel 2', 'isPassword': True }
     }
     l_url = [
       'https://api.developmentseed.org/satellites/?limit=2000',
@@ -48,7 +48,7 @@ class API_RP(API_Catalog):
         'sentinel-2': "https://{}.execute-api.eu-central-1.amazonaws.com/production/sentinel"
     }
     self.response = None
-    API_Catalog.__init__(self)
+    API_Catalog.__init__(self, keysSetting )
 
   def _getUrlImage(self, meta_json, sbands ):
     satellite = meta_json['satellite_name']
