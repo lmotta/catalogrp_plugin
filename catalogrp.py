@@ -19,7 +19,7 @@ email                : motta.luiz@gmail.com
  ***************************************************************************/
 """
 
-import os, json, math
+import json 
 
 from PyQt4 import QtCore, QtGui
 
